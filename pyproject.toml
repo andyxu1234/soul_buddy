@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio"]
+docs = ["mkdocs-material>=9.5"]
 
 [tool.setuptools]
 packages = ["soul_buddy", "soul_buddy.providers", "soul_buddy.tools",

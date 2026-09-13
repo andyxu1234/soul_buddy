@@ -47,7 +47,7 @@ SoulBuddy 给模型暴露了 7 个工具：
 
 ### 2.2 策略层（bash 一刀切 ASK）
 
-[soul_buddy/permissions/policy.py:79-82](../../soul_buddy/permissions/policy.py)：
+[soul_buddy/permissions/policy.py:79-82](https://github.com/andyxu1234/soul_buddy/blob/main/soul_buddy/permissions/policy.py)：
 
 ```python
 # 5. plain bash -> ASK (never remember, command variants are unbounded)

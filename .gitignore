@@ -29,6 +29,9 @@ electron.vite.config.*.mjs
 desktop/build/nsis_tools/
 desktop/build/_asar_extract/
 
+# Docs site build output (MkDocs)
+site/
+
 # IDE / local runtime state
 .idea/
 .trae/
