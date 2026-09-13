@@ -1,6 +1,7 @@
 site_name: SoulBuddy 手册
 site_description: 一个"真能干活"的桌面 coding agent 的设计与实现（Electron + FastAPI + 真实 LLM tool-calling loop）
 site_url: https://andyxu1234.github.io/soul_buddy/
+copyright: Copyright &copy; 2026 andyxu1234
 repo_url: https://github.com/andyxu1234/soul_buddy
 repo_name: andyxu1234/soul_buddy
 edit_uri: edit/main/docs/
