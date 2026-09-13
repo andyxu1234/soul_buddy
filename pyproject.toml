@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "soul-buddy"
+version = "0.1.0"
+description = "A usable mini WorkBuddy desktop coding agent (Electron + FastAPI + real LLM tool-calling loop)"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "httpx",
+    "anthropic",
+    "openai",
+    "python-dotenv",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio"]
+
+[tool.setuptools]
+packages = ["soul_buddy", "soul_buddy.providers", "soul_buddy.tools",
+           "soul_buddy.permissions", "soul_buddy.context", "soul_buddy.memory",
+           "soul_buddy.skills", "soul_buddy.mcp",
+           "soul_buddy.api", "soul_buddy.api.routers"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q"

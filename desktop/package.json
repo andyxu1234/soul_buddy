@@ -1,0 +1,67 @@
+{
+  "name": "soul-buddy-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "soul_buddy desktop shell (Electron + FastAPI sidecar)",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start": "electron-vite preview",
+    "build:sidecar": "cd .. && python build/build_sidecar.py",
+    "build:all": "npm run build:sidecar && npm run build",
+    "dist": "npm run build:all && electron-builder"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
+    "remark-gfm": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^31.3.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0"
+  },
+  "build": {
+    "appId": "com.soulbuddy.app",
+    "productName": "SoulBuddy",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "out/renderer",
+        "to": "renderer"
+      },
+      {
+        "from": "../dist/soul_sidecar.exe",
+        "to": "sidecar/soul_sidecar.exe"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": "x64"
+        }
+      ],
+      "artifactName": "SoulBuddy-${version}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

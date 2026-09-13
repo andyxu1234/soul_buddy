@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 470" width="1000" height="470">
+<style>text{font-family:'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', 'SimHei', sans-serif;}</style>
+<defs>
+<marker id="a-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#2563eb"/></marker>
+<marker id="a-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#ea580c"/></marker>
+<marker id="a-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#16a34a"/></marker>
+<marker id="a-purple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#9333ea"/></marker>
+<marker id="a-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#dc2626"/></marker>
+<marker id="a-gray" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#6b7280"/></marker>
+</defs>
+<rect width="1000" height="470" fill="#ffffff"/>
+<text x="40" y="36" font-size="19" fill="#111827" text-anchor="start" font-weight="600">soul_buddy 里程碑路线图（feasibility §4.3 重排后）</text>
+<text x="40" y="58" font-size="12" fill="#6b7280" text-anchor="start" font-weight="400">执行顺序：P0 → P1 → ★P1.5 打包 Spike → P2 → ★P4 桌面壳 → P3 记忆 → P5 skills/MCP + 正式打包</text>
+<line x1="200.0" y1="100" x2="200.0" y2="380" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="3,3"/>
+<text x="200.0" y="398" font-size="11" fill="#9ca3af" text-anchor="middle" font-weight="400">0d</text>
+<line x1="288.1" y1="100" x2="288.1" y2="380" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="3,3"/>
+<text x="288.0952380952381" y="398" font-size="11" fill="#9ca3af" text-anchor="middle" font-weight="400">5d</text>
+<line x1="376.2" y1="100" x2="376.2" y2="380" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="3,3"/>
+<text x="376.1904761904762" y="398" font-size="11" fill="#9ca3af" text-anchor="middle" font-weight="400">10d</text>
+<line x1="464.3" y1="100" x2="464.3" y2="380" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="3,3"/>
+<text x="464.28571428571433" y="398" font-size="11" fill="#9ca3af" text-anchor="middle" font-weight="400">15d</text>
+<line x1="552.4" y1="100" x2="552.4" y2="380" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="3,3"/>
+<text x="552.3809523809524" y="398" font-size="11" fill="#9ca3af" text-anchor="middle" font-weight="400">20d</text>
+<line x1="640.5" y1="100" x2="640.5" y2="380" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="3,3"/>
+<text x="640.4761904761905" y="398" font-size="11" fill="#9ca3af" text-anchor="middle" font-weight="400">25d</text>
+<line x1="728.6" y1="100" x2="728.6" y2="380" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="3,3"/>
+<text x="728.5714285714287" y="398" font-size="11" fill="#9ca3af" text-anchor="middle" font-weight="400">30d</text>
+<line x1="816.7" y1="100" x2="816.7" y2="380" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="3,3"/>
+<text x="816.6666666666667" y="398" font-size="11" fill="#9ca3af" text-anchor="middle" font-weight="400">35d</text>
+<line x1="904.8" y1="100" x2="904.8" y2="380" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="3,3"/>
+<text x="904.7619047619048" y="398" font-size="11" fill="#9ca3af" text-anchor="middle" font-weight="400">40d</text>
+<line x1="200.0" y1="380" x2="940.0" y2="380" stroke="#9ca3af" stroke-width="1"/>
+<text x="190" y="117" font-size="12" fill="#111827" text-anchor="end" font-weight="600">P0  骨架 + 真 LLM</text>
+<rect x="200.0" y="100" width="79.28571428571429" height="24" rx="5" ry="5" fill="#2563eb" stroke="#bfdbfe" stroke-width="1.2"/>
+<text x="287.2857142857143" y="117" font-size="11" fill="#6b7280" text-anchor="start" font-weight="400">4–5d</text>
+<text x="190" y="157" font-size="12" fill="#111827" text-anchor="end" font-weight="600">P1  工具 + 权限 + 审计</text>
+<rect x="279.2857142857143" y="140" width="105.71428571428572" height="24" rx="5" ry="5" fill="#2563eb" stroke="#bfdbfe" stroke-width="1.2"/>
+<text x="393.0" y="157" font-size="11" fill="#6b7280" text-anchor="start" font-weight="400">5–6d</text>
+<text x="190" y="197" font-size="12" fill="#111827" text-anchor="end" font-weight="600">P1.5 打包 Spike</text>
+<rect x="385.0" y="180" width="17.61904761904762" height="24" rx="5" ry="5" fill="#ea580c" stroke="#fed7aa" stroke-width="1.2"/>
+<text x="410.6190476190476" y="197" font-size="11" fill="#6b7280" text-anchor="start" font-weight="400">1d</text>
+<text x="385.0" y="174" font-size="10" fill="#c2410c" text-anchor="start" font-weight="400">★ 前置：fail fast on highest risk</text>
+<text x="190" y="237" font-size="12" fill="#111827" text-anchor="end" font-weight="600">P2  上下文层</text>
+<rect x="402.61904761904765" y="220" width="79.28571428571429" height="24" rx="5" ry="5" fill="#2563eb" stroke="#bfdbfe" stroke-width="1.2"/>
+<text x="489.9047619047619" y="237" font-size="11" fill="#6b7280" text-anchor="start" font-weight="400">4–5d</text>
+<text x="190" y="277" font-size="12" fill="#111827" text-anchor="end" font-weight="600">P4  Electron 桌面壳</text>
+<rect x="481.9047619047619" y="260" width="158.57142857142858" height="24" rx="5" ry="5" fill="#ea580c" stroke="#fed7aa" stroke-width="1.2"/>
+<text x="648.4761904761905" y="277" font-size="11" fill="#6b7280" text-anchor="start" font-weight="400">8–10d</text>
+<text x="481.9047619047619" y="254" font-size="10" fill="#c2410c" text-anchor="start" font-weight="400">★ 提前：先能看见，再长肉</text>
+<text x="190" y="317" font-size="12" fill="#111827" text-anchor="end" font-weight="600">P3  记忆 + SQLite</text>
+<rect x="640.4761904761905" y="300" width="61.66666666666667" height="24" rx="5" ry="5" fill="#0891b2" stroke="#a5f3fc" stroke-width="1.2"/>
+<text x="710.1428571428571" y="317" font-size="11" fill="#6b7280" text-anchor="start" font-weight="400">3–4d</text>
+<text x="190" y="357" font-size="12" fill="#111827" text-anchor="end" font-weight="600">P5  skills/MCP + 打包</text>
+<rect x="702.1428571428571" y="340" width="176.1904761904762" height="24" rx="5" ry="5" fill="#2563eb" stroke="#bfdbfe" stroke-width="1.2"/>
+<text x="886.3333333333333" y="357" font-size="11" fill="#6b7280" text-anchor="start" font-weight="400">8–12d</text>
+<text x="40" y="424" font-size="12" fill="#111827" text-anchor="start" font-weight="400">合计 32–42 全职工作日；含 30% 返工缓冲 → 42–55 天 ≈ 8.5–11 周全职（业余 3–4h/天约 16–22 周）</text>
+<text x="40" y="446" font-size="12" fill="#6b7280" text-anchor="start" font-weight="400">最小可用范围：P0 + P1 + P1.5 + P4 + 打包 ≈ 4 周 —— 缺 P2/P3 仍能跑，缺 P0/P1/P4 则不成立</text>
+</svg>

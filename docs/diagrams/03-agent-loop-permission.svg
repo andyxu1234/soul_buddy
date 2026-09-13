@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 860" width="1000" height="860">
+<style>text{font-family:'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', 'SimHei', sans-serif;}</style>
+<defs>
+<marker id="a-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#2563eb"/></marker>
+<marker id="a-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#ea580c"/></marker>
+<marker id="a-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#16a34a"/></marker>
+<marker id="a-purple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#9333ea"/></marker>
+<marker id="a-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#dc2626"/></marker>
+<marker id="a-gray" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#6b7280"/></marker>
+</defs>
+<rect width="1000" height="860" fill="#ffffff"/>
+<text x="40" y="36" font-size="19" fill="#111827" text-anchor="start" font-weight="600">soul_buddy · Agent loop 与权限决策流程</text>
+<text x="40" y="58" font-size="12" fill="#6b7280" text-anchor="start" font-weight="400">agent.py 真 tool-calling loop；权限默认 deny；bash 命令字符串内路径二次扫描（ADR-006 / INV-9）</text>
+<text x="40" y="92" font-size="14" fill="#1d4ed8" text-anchor="start" font-weight="600">A. SoulAgent.run() 主循环</text>
+<rect x="40" y="104" width="110" height="56" rx="8" ry="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+<text x="95.0" y="129.0" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">run 请求</text>
+<text x="95.0" y="146.0" font-size="10" fill="#6b7280" text-anchor="middle" font-weight="400">user message</text>
+<path d="M 150 132.0 L 156 132.0" fill="none" stroke="#2563eb" stroke-width="1.4" marker-end="url(#a-blue)"/>
+<rect x="156" y="104" width="110" height="56" rx="8" ry="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+<text x="211.0" y="129.0" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">run() 入口</text>
+<text x="211.0" y="146.0" font-size="10" fill="#6b7280" text-anchor="middle" font-weight="400">turn=0</text>
+<path d="M 266 132.0 L 272 132.0" fill="none" stroke="#2563eb" stroke-width="1.4" marker-end="url(#a-blue)"/>
+<rect x="272" y="104" width="110" height="56" rx="8" ry="8" fill="#faf5ff" stroke="#e9d5ff" stroke-width="1.5"/>
+<text x="327.0" y="129.0" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">call LLM</text>
+<text x="327.0" y="146.0" font-size="10" fill="#6b7280" text-anchor="middle" font-weight="400">归一化 ToolSpec</text>
+<path d="M 382 132.0 L 388 132.0" fill="none" stroke="#2563eb" stroke-width="1.4" marker-end="url(#a-blue)"/>
+<rect x="388" y="104" width="110" height="56" rx="8" ry="8" fill="#faf5ff" stroke="#e9d5ff" stroke-width="1.5"/>
+<text x="443.0" y="129.0" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">解析</text>
+<text x="443.0" y="146.0" font-size="10" fill="#6b7280" text-anchor="middle" font-weight="400">ModelTurn.tool_calls</text>
+<path d="M 498 132.0 L 504 132.0" fill="none" stroke="#2563eb" stroke-width="1.4" marker-end="url(#a-blue)"/>
+<rect x="504" y="104" width="110" height="56" rx="8" ry="8" fill="#ffedd5" stroke="#fdba74" stroke-width="1.5"/>
+<text x="559.0" y="129.0" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">PermissionGate</text>
+<text x="559.0" y="146.0" font-size="10" fill="#6b7280" text-anchor="middle" font-weight="400">decide() 策略判定</text>
+<path d="M 614 132.0 L 620 132.0" fill="none" stroke="#2563eb" stroke-width="1.4" marker-end="url(#a-blue)"/>
+<rect x="620" y="104" width="110" height="56" rx="8" ry="8" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.5"/>
+<text x="675.0" y="129.0" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">execute tool</text>
+<text x="675.0" y="146.0" font-size="10" fill="#6b7280" text-anchor="middle" font-weight="400">含 bash 二次扫描</text>
+<path d="M 730 132.0 L 736 132.0" fill="none" stroke="#2563eb" stroke-width="1.4" marker-end="url(#a-blue)"/>
+<rect x="736" y="104" width="110" height="56" rx="8" ry="8" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.5"/>
+<text x="791.0" y="129.0" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">JSONL 落盘</text>
+<text x="791.0" y="146.0" font-size="10" fill="#6b7280" text-anchor="middle" font-weight="400">→ audit 哈希链</text>
+<path d="M 846 132.0 L 852 132.0" fill="none" stroke="#2563eb" stroke-width="1.4" marker-end="url(#a-blue)"/>
+<rect x="852" y="104" width="110" height="56" rx="8" ry="8" fill="#f0fdfa" stroke="#99f6e4" stroke-width="1.5"/>
+<text x="907.0" y="129.0" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">SSE snapshot</text>
+<text x="907.0" y="146.0" font-size="10" fill="#6b7280" text-anchor="middle" font-weight="400">推前端</text>
+<path d="M 962 132.0 L 976 132.0 L 976 168 L 396 168 L 396 132.0 L 382 132.0" fill="none" stroke="#9333ea" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#a-purple)"/>
+<text x="560" y="162" font-size="10" fill="#7c3aed" text-anchor="middle" font-weight="400">轮次↑ · 未达 MAX_TURNS 回 LLM</text>
+<polygon points="1017,318.0 1092.0,350 1017,382.0 942.0,350" fill="#fef9c3" stroke="#facc15" stroke-width="1.5"/>
+<text x="1017" y="348" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">yield stop？</text>
+<text x="1017" y="364" font-size="10" fill="#6b7280" text-anchor="middle" font-weight="400">模型无 tool_calls / 达 MAX_TURNS</text>
+<path d="M 962 132.0 L 962 318" fill="none" stroke="#9333ea" stroke-width="1.4" marker-end="url(#a-purple)"/>
+<path d="M 1092 350 L 1112 350" fill="none" stroke="#2563eb" stroke-width="1.4" marker-end="url(#a-blue)"/>
+<rect x="1112" y="322" width="150" height="56" rx="8" ry="8" fill="#dcfce7" stroke="#86efac" stroke-width="1.5"/>
+<text x="1187.0" y="347.0" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">run 完成</text>
+<text x="1187.0" y="364.0" font-size="10" fill="#6b7280" text-anchor="middle" font-weight="400">副作用保留 · 不自动回滚(A11)</text>
+<path d="M 559.0 160 L 559.0 250 L 500 250 L 500 296" fill="none" stroke="#ea580c" stroke-width="1.6" stroke-dasharray="2,3" marker-end="url(#a-orange)"/>
+<text x="360" y="244" font-size="10" fill="#c2410c" text-anchor="middle" font-weight="400">↓ 权限判定放大见 B</text>
+<path d="M 559.0 160 L 559.0 210 L 250 210 L 250 160" fill="none" stroke="#dc2626" stroke-width="1.4" stroke-dasharray="4,3" marker-end="url(#a-red)"/>
+<text x="300" y="204" font-size="10" fill="#dc2626" text-anchor="middle" font-weight="400">hard_deny：返回 tool_result(error) 并入环</text>
+<rect x="40" y="296" width="920" height="540" rx="10" ry="10" fill="#fffdf7" stroke="#fde68a" stroke-width="1.5"/>
+<text x="56" y="322" font-size="14" fill="#92400e" text-anchor="start" font-weight="600">B. PermissionGate.decide() 决策放大（含 bash 命令内路径二次扫描）</text>
+<rect x="390" y="350" width="220" height="44" rx="8" ry="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="500.0" y="369.0" font-size="13" fill="#111827" text-anchor="middle" font-weight="600">输入 tool_call</text>
+<text x="500.0" y="386.0" font-size="10.5" fill="#6b7280" text-anchor="middle" font-weight="400">{name, args}</text>
+<polygon points="500,395.0 620.0,430 500,465.0 380.0,430" fill="#e0f2fe" stroke="#7dd3fc" stroke-width="1.5"/>
+<text x="500" y="428" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">在 scope 白名单</text>
+<text x="500" y="444" font-size="10" fill="#6b7280" text-anchor="middle" font-weight="400">或 policy 明确允许？</text>
+<path d="M 500 394 L 500 395" fill="none" stroke="#6b7280" stroke-width="1.4" marker-end="url(#a-gray)"/>
+<path d="M 620 430 L 700 430" fill="none" stroke="#16a34a" stroke-width="1.6" marker-end="url(#a-green)"/>
+<rect x="700" y="408" width="150" height="44" rx="8" ry="8" fill="#dcfce7" stroke="#86efac" stroke-width="1.5"/>
+<text x="775.0" y="435.0" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">放行 execute</text>
+<polygon points="500,505.0 620.0,540 500,575.0 380.0,540" fill="#fee2e2" stroke="#fca5a5" stroke-width="1.5"/>
+<text x="500" y="538" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">命中 hard_deny？</text>
+<text x="500" y="554" font-size="10" fill="#6b7280" text-anchor="middle" font-weight="400">路径越界/危险命令(INV-3/4)</text>
+<path d="M 500 465 L 500 500 L 380 500 L 380 540" fill="none" stroke="#ea580c" stroke-width="1.5" marker-end="url(#a-orange)"/>
+<path d="M 500 575 L 500 612" fill="none" stroke="#dc2626" stroke-width="1.6" marker-end="url(#a-red)"/>
+<rect x="390" y="612" width="220" height="48" rx="8" ry="8" fill="#fee2e2" stroke="#fca5a5" stroke-width="1.5"/>
+<text x="500.0" y="633.0" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">直接拒绝</text>
+<text x="500.0" y="650.0" font-size="10" fill="#6b7280" text-anchor="middle" font-weight="400">返回 tool_result(error) · 不询问</text>
+<path d="M 380 540 L 260 540 L 260 612 L 270 612" fill="none" stroke="#ea580c" stroke-width="1.5" marker-end="url(#a-orange)"/>
+<rect x="140" y="588" width="130" height="48" rx="8" ry="8" fill="#fef3c7" stroke="#fcd34d" stroke-width="1.5"/>
+<text x="205.0" y="609.0" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">ask 用户</text>
+<text x="205.0" y="626.0" font-size="10" fill="#6b7280" text-anchor="middle" font-weight="400">三通道</text>
+<text x="205" y="658" font-size="9.5" fill="#78350f" text-anchor="middle" font-weight="400">终端/REST/桌面弹窗</text>
+<polygon points="205,684.0 280.0,712 205,740.0 130.0,712" fill="#fef3c7" stroke="#fcd34d" stroke-width="1.5"/>
+<text x="205" y="717" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">用户决定？</text>
+<path d="M 205 636 L 205 684" fill="none" stroke="#ea580c" stroke-width="1.4" marker-end="url(#a-orange)"/>
+<path d="M 280 712 L 335 712" fill="none" stroke="#16a34a" stroke-width="1.4" marker-end="url(#a-green)"/>
+<rect x="335" y="690" width="120" height="44" rx="8" ry="8" fill="#dcfce7" stroke="#86efac" stroke-width="1.5"/>
+<text x="395.0" y="717.0" font-size="12" fill="#111827" text-anchor="middle" font-weight="600">放行 execute</text>
+<path d="M 205 740 L 205 770 L 390 770 L 390 660" fill="none" stroke="#dc2626" stroke-width="1.4" stroke-dasharray="4,3" marker-end="url(#a-red)"/>
+<text x="145" y="786" font-size="9.5" fill="#dc2626" text-anchor="middle" font-weight="400">拒绝 → tool_result(error)</text>
+<path d="M 850 430 L 850 430 L 780 430 L 780 470" fill="none" stroke="#16a34a" stroke-width="1.5" marker-end="url(#a-green)"/>
+<rect x="710" y="446" width="200" height="48" rx="8" ry="8" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+<text x="810.0" y="467.0" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">bash 执行前</text>
+<text x="810.0" y="484.0" font-size="10" fill="#6b7280" text-anchor="middle" font-weight="400">bash_scan 二次扫描命令串</text>
+<text x="810" y="512" font-size="9.5" fill="#9a3412" text-anchor="middle" font-weight="400">2b 命令内路径 · 3b 参数路径</text>
+<polygon points="810,527.0 920.0,560 810,593.0 700.0,560" fill="#fee2e2" stroke="#fca5a5" stroke-width="1.5"/>
+<text x="810" y="558" font-size="12.5" fill="#111827" text-anchor="middle" font-weight="600">命令内路径越界？</text>
+<text x="810" y="574" font-size="10" fill="#6b7280" text-anchor="middle" font-weight="400">(INV-6/9 · ADR-006)</text>
+<path d="M 810 494 L 810 527" fill="none" stroke="#ea580c" stroke-width="1.4" marker-end="url(#a-orange)"/>
+<path d="M 810 593 L 810 624" fill="none" stroke="#dc2626" stroke-width="1.6" marker-end="url(#a-red)"/>
+<rect x="700" y="624" width="220" height="44" rx="8" ry="8" fill="#fee2e2" stroke="#fca5a5" stroke-width="1.5"/>
+<text x="810.0" y="643.0" font-size="12" fill="#111827" text-anchor="middle" font-weight="600">拒绝执行</text>
+<text x="810.0" y="660.0" font-size="10.5" fill="#6b7280" text-anchor="middle" font-weight="400">路径守卫拦截</text>
+<path d="M 920 560 L 960 560" fill="none" stroke="#16a34a" stroke-width="1.6" marker-end="url(#a-green)"/>
+<rect x="960" y="538" width="120" height="44" rx="8" ry="8" fill="#dcfce7" stroke="#86efac" stroke-width="1.5"/>
+<text x="1020.0" y="557.0" font-size="12" fill="#111827" text-anchor="middle" font-weight="600">执行子进程</text>
+<text x="1020.0" y="574.0" font-size="10.5" fill="#6b7280" text-anchor="middle" font-weight="400">凭据隔离</text>
+<text x="56" y="824" font-size="11" fill="#78350f" text-anchor="start" font-weight="400">要点：默认 deny；hard_deny 永不询问；default_deny 未知才 ask；bash 即使权限通过仍过命令内路径扫描（A06 修补的真实安全缺口）</text>
+</svg>

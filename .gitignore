@@ -1,0 +1,36 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# PyInstaller artifacts (work dirs only — the hand-written .spec files ARE committed)
+build/soul_sidecar/
+build/soul_spike/
+dist/
+
+# Local secrets (contains API keys — NEVER commit)
+.env
+
+# Test / runtime scratch
+*.log
+
+# Node / Electron (P4/P5)
+node_modules/
+dist-electron/
+release/
+release_build*/
+out/
+electron.vite.config.*.mjs
+
+# Desktop packaging helpers: vendored tools & temp unpack scratch
+# (desktop/build/empty-sign.js is a hand-written script and IS committed)
+desktop/build/nsis_tools/
+desktop/build/_asar_extract/
+
+# IDE / local runtime state
+.idea/
+.trae/
+.workbuddy/
+.soul_sandbox_home/

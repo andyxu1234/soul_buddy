@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>soul_buddy 架构设计图</title>
+<style>
+  :root{ --blue:#2563eb; --ink:#111827; --muted:#6b7280; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'PingFang SC','Microsoft YaHei',Helvetica,Arial,sans-serif;
+       background:#f8fafc;color:var(--ink);line-height:1.5}
+  header{padding:24px 32px;background:#fff;border-bottom:1px solid #e5e7eb}
+  header h1{margin:0;font-size:22px}
+  header p{margin:6px 0 0;color:var(--muted);font-size:13px}
+  main{max-width:1100px;margin:0 auto;padding:24px 16px 64px}
+  figure{background:#fff;border:1px solid #e5e7eb;border-radius:12px;
+         padding:16px;margin:0 0 28px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  figure h2{margin:0 0 4px;font-size:16px}
+  figure .cap{color:var(--muted);font-size:12.5px;margin:0 0 12px}
+  figure img{width:100%;height:auto;border:1px solid #f1f5f9;border-radius:8px;background:#fff}
+  .meta{font-size:11.5px;color:var(--muted);margin-top:8px}
+  a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>soul_buddy · 架构与流程设计图</h1>
+  <p>依据 feasibility-analysis（D1–D5 修订版）+ implementation-plan v1.1。源文件为 SVG，可无限缩放；本页为浏览索引。</p>
+</header>
+<main>
+  <figure>
+    <h2>01 · 整体架构 · 进程与部署视图</h2>
+    <p class="cap">Electron 桌面壳（Node） + FastAPI sidecar（Python 单进程 workers=1） + 可切换 LLM Provider；含 token/cookie 握手与执行边界。</p>
+    <img src="01-system-architecture.svg" alt="整体架构"/>
+    <div class="meta">约定：蓝=主数据流 / 橙=进程控制 / 绿=持久化 / 紫=模型返回与 SSE 事件</div>
+  </figure>
+
+  <figure>
+    <h2>02 · 后端分层与依赖方向</h2>
+    <p class="cap">D1 修订：permissions/ 提升为与 tools/ 平级顶层包；agent.py 是唯一编排者；只抽象真正会变的三处（ADR-004）。</p>
+    <img src="02-backend-layering.svg" alt="分层依赖"/>
+    <div class="meta">依赖方向自上而下、禁止反向；permissions 与 tools 互不感知，新增执行路径必须先过权限门。</div>
+  </figure>
+
+  <figure>
+    <h2>03 · Agent loop 与权限决策流程</h2>
+    <p class="cap">agent.py 真 tool-calling loop；权限默认 deny；含 bash 命令字符串内路径二次扫描（ADR-006 / INV-9）。</p>
+    <img src="03-agent-loop-permission.svg" alt="Agent loop 与权限决策"/>
+    <div class="meta">A：主循环；B：PermissionGate.decide() 放大图（含 hard_deny 不询问 / ask 三通道 / bash 2b 3b 扫描）。</div>
+  </figure>
+
+  <figure>
+    <h2>04 · 一次 run 的时序图</h2>
+    <p class="cap">SSE snapshot-first + ask 挂起恢复；先落盘 JSONL 再推 SSE，每条状态变更先 snapshot 后 delta。</p>
+    <img src="04-run-sequence.svg" alt="一次 run 时序图"/>
+    <div class="meta">参与者：UI / 主进程 / sidecar / LLM / 磁盘。ask 期间 run=suspended，决策到达后 resume。</div>
+  </figure>
+
+  <figure>
+    <h2>06 · 里程碑路线图</h2>
+    <p class="cap">feasibility §4.3 重排后执行顺序：P0→P1→★P1.5 打包 Spike→P2→★P4 桌面壳→P3 记忆→P5 skills/MCP + 正式打包。</p>
+    <img src="06-milestones.svg" alt="里程碑"/>
+    <div class="meta">最小可用范围 ≈ 4 周（P0+P1+P1.5+P4+打包）；合计 32–42 全职日，含 30% 返工缓冲。</div>
+  </figure>
+
+  <p style="font-size:12px;color:var(--muted)">生成方式：<code>python _gen_arch.py</code>（01/02/06）与 <code>python _gen_flow.py</code>（03/04）输出同目录 SVG，可编辑重生成。</p>
+</main>
+</body>
+</html>
