@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from './Icon'
-import { api } from '../api'
+import { api, type ExpertRow } from '../api'
 
 interface SkillItem {
   title: string
@@ -18,19 +18,24 @@ interface McpItem {
 interface Props {
   /** 点击 skill 时，把 skill 引用插入到输入框 */
   onInsertSkill?: (title: string) => void
+  /** 点击专家时，切换会话级专家 */
+  onExpertPick?: (expertId: string | null) => void
   /** toast 提示 */
   onToast?: (msg: string, tone?: 'ok' | 'err' | 'info') => void
   /** workspace 根路径，用于加载项目级 skills */
   workspaceRoot?: string
+  /** 当前会话绑定的专家 id（用于子菜单高亮） */
+  currentExpertId?: string | null
 }
 
-type SubMenu = null | 'skills' | 'mcp'
+type SubMenu = null | 'experts' | 'skills' | 'mcp'
 
-export function PlusMenu({ onInsertSkill, onToast, workspaceRoot }: Props) {
+export function PlusMenu({ onInsertSkill, onExpertPick, onToast, workspaceRoot, currentExpertId }: Props) {
   const [open, setOpen] = useState(false)
   const [sub, setSub] = useState<SubMenu>(null)
   const [skills, setSkills] = useState<SkillItem[]>([])
   const [mcps, setMcps] = useState<McpItem[]>([])
+  const [experts, setExperts] = useState<ExpertRow[]>([])
   const [loading, setLoading] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -52,6 +57,9 @@ export function PlusMenu({ onInsertSkill, onToast, workspaceRoot }: Props) {
       if (key === 'skills') {
         const res = await api.listSkills(workspaceRoot)
         setSkills(res.skills || [])
+      } else if (key === 'experts') {
+        const res = await api.listExperts()
+        setExperts(res.experts || [])
       } else {
         const res = await api.listConnectors()
         setMcps(res.connectors || [])
@@ -105,9 +113,54 @@ export function PlusMenu({ onInsertSkill, onToast, workspaceRoot }: Props) {
           <TopItem icon="folder" label="添加文件" onClick={() => { setOpen(false); onToast?.('文件引用即将支持', 'info') }} />
           <TopItem icon="message" label="引用对话中的文件" onClick={() => { setOpen(false); onToast?.('引用即将支持', 'info') }} />
           <TopItem icon="zap" label="模式" onClick={() => { setOpen(false); onToast?.('模式切换即将支持', 'info') }} />
-          <TopItem icon="user" label="专家" onClick={() => { setOpen(false); onToast?.('专家即将支持', 'info') }} />
+          <SubItem icon="user" label="专家" subKey="experts" activeSub={sub} onEnter={enterSub} />
           <SubItem icon="sparkles" label="Skills" subKey="skills" activeSub={sub} onEnter={enterSub} />
           <SubItem icon="plug" label="MCP" subKey="mcp" activeSub={sub} onEnter={enterSub} />
+
+          {sub === 'experts' && (
+            <div className="plus-sub">
+              <div className="plus-sub-head">
+                <button className="plus-sub-back" onClick={() => setSub(null)}>
+                  <Icon name="chevron-left" size={13} />
+                </button>
+                <span>选择专家</span>
+                <span className="plus-sub-count">{experts.filter((e) => e.enabled).length}</span>
+              </div>
+              <div className="plus-sub-list">
+                {loading && <div className="plus-sub-empty">加载中...</div>}
+                {!loading && experts.length === 0 && <div className="plus-sub-empty">暂无专家</div>}
+                {!loading && experts.length > 0 && (
+                  <>
+                    <button
+                      className="plus-sub-row"
+                      onClick={() => { onExpertPick?.(null); setOpen(false); setSub(null) }}
+                    >
+                      <span className="psr-dot" style={{ background: '#9ca3af' }} />
+                      <span className="psr-name">不使用专家</span>
+                      {!currentExpertId && <Icon name="check" size={12} />}
+                    </button>
+                    {experts.filter((e) => e.enabled).map((e) => (
+                      <button
+                        key={e.id}
+                        className="plus-sub-row"
+                        onClick={() => { onExpertPick?.(e.id); setOpen(false); setSub(null) }}
+                        title={e.role}
+                      >
+                        <span className="psr-dot" style={{ background: e.color }} />
+                        <span className="psr-name">{e.name}</span>
+                        {e.isBuiltin && <span className="psr-src">内置</span>}
+                        {!e.isBuiltin && <span className="psr-src">用户</span>}
+                        {currentExpertId === e.id && <Icon name="check" size={12} />}
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+              <div className="plus-sub-foot">
+                <span className="psf-hint">点击绑定到当前会话</span>
+              </div>
+            </div>
+          )}
 
           {sub === 'skills' && (
             <div className="plus-sub">

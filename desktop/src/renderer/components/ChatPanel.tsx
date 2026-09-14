@@ -232,7 +232,7 @@ export function ChatPanel({
                 />
                 <div className="composer-bar">
                   <div className="cb-left">
-                    <PlusMenu onInsertSkill={handleInsertSkill} onToast={onToast} workspaceRoot={session?.workspace_root} />
+                    <PlusMenu onInsertSkill={handleInsertSkill} onToast={onToast} workspaceRoot={session?.workspace_root} onExpertPick={onExpertChange} currentExpertId={session?.expert_id} />
                     <PermissionDropdown mode={permMode} onChange={onPermModeChange} />
                   </div>
                   <div className="cb-right">
@@ -385,7 +385,7 @@ export function ChatPanel({
           />
           <div className="composer-bar">
             <div className="cb-left">
-              <PlusMenu onInsertSkill={handleInsertSkill} onToast={onToast} workspaceRoot={session?.workspace_root} />
+              <PlusMenu onInsertSkill={handleInsertSkill} onToast={onToast} workspaceRoot={session?.workspace_root} onExpertPick={onExpertChange} currentExpertId={session?.expert_id} />
               <PermissionDropdown mode={permMode} onChange={onPermModeChange} />
             </div>
             <div className="cb-right">
