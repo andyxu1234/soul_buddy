@@ -5,7 +5,7 @@ import { PermissionDialog } from './PermissionDialog'
 
 import { Icon } from './Icon'
 import { sessionTitle } from './SessionList'
-import { PlusMenu } from './PlusMenu'
+import { PlusMenu, type AgentMode } from './PlusMenu'
 import { PermissionDropdown } from './PermissionDropdown'
 import { ExpertSelector } from './ExpertSelector'
 import { ModelSelector } from './ModelSelector'
@@ -44,6 +44,9 @@ interface Props {
   onProviderChange: (provider: string) => void
   onExpertChange?: (expertId: string | null) => void
   onToast: (msg: string, tone?: 'ok' | 'err' | 'info') => void
+  /** Agent 模式（前端 mock，后端暂不处理） */
+  mode?: AgentMode
+  onModeChange?: (mode: AgentMode) => void
   /** 空状态下用户从居中 composer 发起新会话 */
   onStartNewSession: (prompt: string, workspaceRoot: string) => void
   /** 导航到 Skills / MCP / Expert 面板 */
@@ -68,6 +71,7 @@ export function ChatPanel({
   onToggleRightPanel, onOpenArtifacts, onOpenChanges,
   onPermModeChange, onProviderChange, onExpertChange, onToast,
   onStartNewSession, onNavigate,
+  mode, onModeChange,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
@@ -164,6 +168,52 @@ export function ChatPanel({
     })
   }
 
+  const handleInsertFile = (relativePath: string) => {
+    const ta = textareaRef.current || emptyTextareaRef.current
+    const isEmpty = ta === emptyTextareaRef.current
+    const currentText = isEmpty ? emptyPrompt : prompt
+    const setText = isEmpty ? setEmptyPrompt : onPromptChange
+
+    const start = ta?.selectionStart ?? currentText.length
+    const end = ta?.selectionEnd ?? currentText.length
+    const before = currentText.slice(0, start)
+    const after = currentText.slice(end)
+    const insertion = before.endsWith(' ') || before.length === 0 ? `` : ` `
+    const token = `@${relativePath}`
+    const newText = `${before}${insertion}${token}${after}`
+    setText(newText)
+    requestAnimationFrame(() => {
+      ta?.focus()
+      const pos = start + insertion.length + token.length
+      ta?.setSelectionRange(pos, pos)
+    })
+  }
+
+  const handleInsertLocalFile = (filename: string, content: string) => {
+    const ta = textareaRef.current || emptyTextareaRef.current
+    const isEmpty = ta === emptyTextareaRef.current
+    const currentText = isEmpty ? emptyPrompt : prompt
+    const setText = isEmpty ? setEmptyPrompt : onPromptChange
+
+    const start = ta?.selectionStart ?? currentText.length
+    const end = ta?.selectionEnd ?? currentText.length
+    const before = currentText.slice(0, start)
+    const after = currentText.slice(end)
+    const insertion = before.endsWith(' ') || before.length === 0 ? `` : ` `
+    // 截断过长文件(>20KB),保留头尾
+    const MAX_LOCAL = 20_000
+    const trimmed = content.length > MAX_LOCAL
+      ? content.slice(0, MAX_LOCAL) + `\n... [truncated, 原大小 ${content.length} 字符]`
+      : content
+    const token = `\`\`\`${filename}\n${trimmed}\n\`\`\``
+    const newText = `${before}${insertion}${token}${after}`
+    setText(newText)
+    requestAnimationFrame(() => {
+      ta?.focus()
+      ta?.setSelectionRange(start + insertion.length + token.length, start + insertion.length + token.length)
+    })
+  }
+
   const handlePickWorkspace = async () => {
     try {
       const dir = await native.pickDirectory()
@@ -246,7 +296,7 @@ export function ChatPanel({
                 />
                 <div className="composer-bar">
                   <div className="cb-left">
-                    <PlusMenu onInsertSkill={handleInsertSkill} onToast={onToast} workspaceRoot={session?.workspace_root} onExpertPick={onExpertChange} currentExpertId={session?.expert_id} />
+                    <PlusMenu onInsertSkill={handleInsertSkill} onInsertFile={handleInsertFile} onInsertLocalFile={handleInsertLocalFile} onToast={onToast} workspaceRoot={session?.workspace_root} onExpertPick={onExpertChange} currentExpertId={session?.expert_id} currentMode={mode} onModeChange={onModeChange} />
                     <PermissionDropdown mode={permMode} onChange={onPermModeChange} />
                     <ExpertSelector
                       current={null}
@@ -400,7 +450,7 @@ export function ChatPanel({
           />
           <div className="composer-bar">
             <div className="cb-left">
-              <PlusMenu onInsertSkill={handleInsertSkill} onToast={onToast} workspaceRoot={session?.workspace_root} onExpertPick={onExpertChange} currentExpertId={session?.expert_id} />
+              <PlusMenu onInsertSkill={handleInsertSkill} onInsertFile={handleInsertFile} onInsertLocalFile={handleInsertLocalFile} onToast={onToast} workspaceRoot={session?.workspace_root} onExpertPick={onExpertChange} currentExpertId={session?.expert_id} currentMode={mode} onModeChange={onModeChange} />
               <PermissionDropdown mode={permMode} onChange={onPermModeChange} />
               <ExpertSelector
                 current={session?.expert_id}
@@ -616,3 +666,5 @@ function basename(p: string): string {
   const parts = p.replace(/[\\/]+$/, '').split(/[\\/]/)
   return parts[parts.length - 1] || p
 }
+
+

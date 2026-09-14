@@ -91,6 +91,20 @@ export const api = {
   disconnectConnector: (name: string) => getSoul().disconnectConnector(name) as Promise<{ status: string; connector: string }>,
   getFileContent: (sid: string, path: string) =>
     getSoul().getFileContent(sid, path) as Promise<{ path: string; name: string; content: string; size: number; is_text: boolean }>,
+  listWorkspaceFiles: async (root: string, depth?: number, search?: string) => {
+    const params = new URLSearchParams({ root })
+    if (depth) params.set('depth', String(depth))
+    if (search) params.set('search', search)
+    const resp = await fetch(`${getSoul().getBase()}/api/v1/workspace/tree?${params.toString()}`)
+    if (!resp.ok) throw new Error((await resp.json()).detail || `HTTP ${resp.status}`)
+    return (await resp.json()) as { root: string; items: WorkspaceFileItem[] }
+  },
+  readWorkspaceFile: async (root: string, path: string) => {
+    const params = new URLSearchParams({ root, path })
+    const resp = await fetch(`${getSoul().getBase()}/api/v1/workspace/read?${params.toString()}`)
+    if (!resp.ok) throw new Error((await resp.json()).detail || `HTTP ${resp.status}`)
+    return (await resp.json()) as { path: string; name: string; content: string; size: number; truncated: boolean }
+  },
   listSkills: (workspaceRoot?: string) =>
     getSoul().listSkills(workspaceRoot) as Promise<{ skills: Array<{
       title: string
@@ -156,6 +170,16 @@ export const api = {
 }
 
 interface ApiErrorShape { status: number; detail: unknown }
+
+export interface WorkspaceFileItem {
+  id: string
+  name: string
+  parent: string | null
+  is_dir: boolean
+  size: number | null
+  relative_path: string
+  absolute_path: string
+}
 
 export interface KbRow {
   id: string

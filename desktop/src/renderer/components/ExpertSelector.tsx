@@ -52,7 +52,7 @@ export function ExpertSelector({ current, onChange }: Props) {
             className={`model-option ${!current ? 'active' : ''}`}
             onClick={() => { setOpen(false); onChange(null) }}
           >
-            <span>不使用专家</span>
+            <span className="model-option-label">不使用专家</span>
             {!current && <Icon name="check" size={12} />}
           </button>
           {experts.map((e) => (
@@ -64,7 +64,7 @@ export function ExpertSelector({ current, onChange }: Props) {
               onClick={() => { setOpen(false); if (e.id !== current) onChange(e.id) }}
             >
               <span className="model-dot" style={{ background: e.color }} />
-              <span>{e.name}</span>
+              <span className="model-option-label">{e.name}</span>
               {e.id === current && <Icon name="check" size={12} />}
             </button>
           ))}

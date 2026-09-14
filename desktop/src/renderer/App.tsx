@@ -3,6 +3,7 @@ import { api, streamEvents } from './api'
 import type { SoulEvent, SessionRecord, PermissionRequest, Artifact, ContextUsage } from './types'
 import { SessionList, sessionTitle, type NavView } from './components/SessionList'
 import { ChatPanel } from './components/ChatPanel'
+import type { AgentMode } from './components/PlusMenu'
 import { RightPanel } from './components/RightPanel'
 import { SettingsModal } from './components/SettingsModal'
 import { SkillsPanel } from './components/SkillsPanel'
@@ -91,6 +92,9 @@ export default function App() {
   const [permMode, setPermMode] = useState<'default' | 'allow_all'>('default')
   const permModeRef = useRef(permMode)
   useEffect(() => { permModeRef.current = permMode }, [permMode])
+
+  // Agent 模式（前端 mock，后端暂不处理）
+  const [sessionMode, setSessionMode] = useState<Record<string, AgentMode>>({})
 
   const pushToast = useCallback((msg: string, tone: Toast['tone'] = 'info') => {
     const id = ++toastSeq
@@ -334,6 +338,12 @@ export default function App() {
       .catch((e) => pushToast(formatError(e), 'err'))
   }
 
+  const handleModeChange = (mode: AgentMode) => {
+    if (!selectedId) return
+    setSessionMode((prev) => ({ ...prev, [selectedId]: mode }))
+    // TODO: 后端实现后改为调用 api.updateSession(selectedId, { mode })
+  }
+
   const handleDelete = () => {
     const target = deleteTarget
     setDeleteTarget(null)
@@ -468,6 +478,8 @@ export default function App() {
             onToast={pushToast}
             onStartNewSession={handleStartNewSession}
             onNavigate={(v) => setActiveView(v)}
+            mode={selectedId ? sessionMode[selectedId] : undefined}
+            onModeChange={handleModeChange}
           />
           {selected && rightPanelOpen && (
             <>

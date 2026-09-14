@@ -14,7 +14,7 @@ from .runtime import Runtime, assert_single_worker
 from .deps import COOKIE_NAME
 from .routers import (
     acp, events, experts, file_history, health, kb, maintenance, mcp, memory,
-    permissions, prompt, runs, sessions, shutdown, skills,
+    permissions, prompt, runs, sessions, shutdown, skills, workspace,
 )
 
 load_dotenv()
@@ -50,7 +50,7 @@ def create_app(static_dir: str | None = None) -> FastAPI:
     for r in (sessions.router, runs.router, events.router, health.router,
               acp.router, permissions.router, maintenance.router, shutdown.router,
               mcp.router, file_history.router, skills.router, prompt.router,
-              memory.router, experts.router, kb.router):
+              memory.router, experts.router, kb.router, workspace.router):
         app.include_router(r)
 
     # Static frontend (P4): serve the built React app same-origin. Mounted last

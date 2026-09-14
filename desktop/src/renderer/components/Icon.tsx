@@ -48,6 +48,7 @@ export type IconName =
   | 'wrench'
   | 'brain'
   | 'link'
+  | 'database'
 
 const PATHS: Record<IconName, JSX.Element> = {
   plus: <path d="M12 5v14M5 12h14" />,
@@ -227,6 +228,13 @@ const PATHS: Record<IconName, JSX.Element> = {
     <>
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.71" />
+    </>
+  ),
+  database: (
+    <>
+      <ellipse cx="12" cy="5" rx="8" ry="3" />
+      <path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5" />
+      <path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" />
     </>
   ),
 }
