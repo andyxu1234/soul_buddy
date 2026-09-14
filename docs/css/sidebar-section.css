@@ -1,0 +1,19 @@
+/* 侧边栏父级（section）加粗加大，与子标题拉开区分度 */
+.md-nav__item--section > .md-nav__link {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+/* 子标题保持 Material 默认（稍小稍轻），拉开层级 */
+.md-nav__item--section .md-nav__item .md-nav__link {
+  font-size: 14px;
+  font-weight: 400;
+}
+
+/* 父级悬停态不抢子级 active 的视觉焦点 */
+.md-nav__item--section > .md-nav__link:hover {
+  color: var(--md-typeset-a-color);
+}

@@ -94,3 +94,4 @@ extra_javascript:
   - js/mermaid-init.js
 extra_css:
   - css/mermaid.css
+  - css/sidebar-section.css
