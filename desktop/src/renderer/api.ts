@@ -114,11 +114,11 @@ export const api = {
     getSoul().listExperts() as Promise<{ experts: ExpertRow[] }>,
   createExpert: (fields: {
     name: string; role?: string; systemPrompt?: string; color?: string;
-    kbIds?: string[]; enabled?: boolean
+    kbIds?: string[]; enabled?: boolean; replaceCore?: boolean
   }) => getSoul().createExpert(fields) as Promise<ExpertRow>,
   updateExpert: (expertId: string, fields: {
     name?: string; role?: string; systemPrompt?: string; color?: string;
-    kbIds?: string[]; enabled?: boolean
+    kbIds?: string[]; enabled?: boolean; replaceCore?: boolean
   }) => getSoul().updateExpert(expertId, fields) as Promise<ExpertRow>,
   deleteExpert: (expertId: string) =>
     getSoul().deleteExpert(expertId) as Promise<{ status: string; expert_id: string }>,
@@ -185,6 +185,7 @@ export interface ExpertRow {
   enabled: boolean
   color: string
   kbIds: string[]
+  replaceCore: boolean
   createdAt: number
   updatedAt: number
 }

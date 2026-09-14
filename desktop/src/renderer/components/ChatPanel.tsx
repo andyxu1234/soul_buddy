@@ -9,7 +9,7 @@ import { PlusMenu } from './PlusMenu'
 import { PermissionDropdown } from './PermissionDropdown'
 import { ExpertSelector } from './ExpertSelector'
 import { ModelSelector } from './ModelSelector'
-import { native } from '../api'
+import { api, native } from '../api'
 import { EmotionBall } from './EmotionBall'
 
 const SB_THEME = { body: '#3b82f6', eyes: '#0f172a' }
@@ -74,6 +74,20 @@ export function ChatPanel({
   const [pinnedToBottom, setPinnedToBottom] = useState(true)
   const [usageOpen, setUsageOpen] = useState(false)
   const usageBtnRef = useRef<HTMLButtonElement>(null)
+  const [expertLabel, setExpertLabel] = useState<{ name: string; color: string } | null>(null)
+
+  // 加载当前会话绑定的专家详情,用于 SoulBuddy 名字旁显示标签
+  useEffect(() => {
+    if (!session?.expert_id) { setExpertLabel(null); return }
+    let cancelled = false
+    api.listExperts().then((res) => {
+      if (cancelled) return
+      const found = res.experts.find((e) => e.id === session?.expert_id)
+      if (found && found.enabled) setExpertLabel({ name: found.name, color: found.color })
+      else setExpertLabel(null)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [session?.expert_id])
 
   // 运行耗时显示: 每秒刷新一次
   const [elapsed, setElapsed] = useState<string>('')
@@ -234,6 +248,10 @@ export function ChatPanel({
                   <div className="cb-left">
                     <PlusMenu onInsertSkill={handleInsertSkill} onToast={onToast} workspaceRoot={session?.workspace_root} onExpertPick={onExpertChange} currentExpertId={session?.expert_id} />
                     <PermissionDropdown mode={permMode} onChange={onPermModeChange} />
+                    <ExpertSelector
+                      current={null}
+                      onChange={(id) => onExpertChange?.(id)}
+                    />
                   </div>
                   <div className="cb-right">
                     {startingNew ? (
@@ -242,10 +260,6 @@ export function ChatPanel({
                       </div>
                     ) : (
                       <>
-                        <ExpertSelector
-                          current={null}
-                          onChange={(id) => onExpertChange?.(id)}
-                        />
                         <ModelSelector
                           current={session?.provider}
                           providers={providers}
@@ -321,6 +335,7 @@ export function ChatPanel({
               onOpenArtifacts={onOpenArtifacts}
               onOpenChanges={onOpenChanges}
               onEditUser={onPromptChange}
+              expert={expertLabel}
             />
             {streamReasoning ? (
               <div className="msg">
@@ -387,6 +402,10 @@ export function ChatPanel({
             <div className="cb-left">
               <PlusMenu onInsertSkill={handleInsertSkill} onToast={onToast} workspaceRoot={session?.workspace_root} onExpertPick={onExpertChange} currentExpertId={session?.expert_id} />
               <PermissionDropdown mode={permMode} onChange={onPermModeChange} />
+              <ExpertSelector
+                current={session?.expert_id}
+                onChange={(id) => onExpertChange?.(id)}
+              />
             </div>
             <div className="cb-right">
               {contextUsage && (
@@ -400,10 +419,6 @@ export function ChatPanel({
                   <UsageRing usage={contextUsage} />
                 </button>
               )}
-              <ExpertSelector
-                current={session?.expert_id}
-                onChange={(id) => onExpertChange?.(id)}
-              />
               <ModelSelector
                 current={session?.provider}
                 providers={providers}

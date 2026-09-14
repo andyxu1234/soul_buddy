@@ -33,6 +33,7 @@ async def create_expert(body: dict, runtime=Depends(get_runtime)):
         color=body.get("color") or "#7c3aed",
         kb_ids=[str(k) for k in body.get("kbIds", [])],
         enabled=bool(body.get("enabled", True)),
+        replace_core=bool(body.get("replaceCore", False)),
     )
     return exp.to_api()
 
@@ -53,6 +54,8 @@ async def update_expert(expert_id: str, body: dict, runtime=Depends(get_runtime)
         fields["enabled"] = bool(body["enabled"])
     if "kbIds" in body:
         fields["kb_ids"] = [str(k) for k in body["kbIds"]]
+    if "replaceCore" in body:
+        fields["replace_core"] = bool(body["replaceCore"])
     if not fields:
         raise HTTPException(status_code=400, detail="no updatable field provided")
     exp = runtime.experts.update(expert_id, **fields)

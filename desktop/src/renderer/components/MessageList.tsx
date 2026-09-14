@@ -24,6 +24,8 @@ interface Props {
   onOpenArtifacts: () => void
   onOpenChanges: () => void
   onEditUser?: (text: string) => void
+  /** 当前会话绑定的专家（用于在 SoulBuddy 名字旁显示标签） */
+  expert?: { name: string; color: string } | null
 }
 
 type Item =
@@ -71,7 +73,7 @@ function ReasoningCard({ text, provider }: { text: string; provider?: string }) 
   )
 }
 
-export function MessageList({ events, onOpenArtifacts, onOpenChanges, onEditUser }: Props) {
+export function MessageList({ events, onOpenArtifacts, onOpenChanges, onEditUser, expert }: Props) {
   const [vote, setVote] = useState<Record<string, 'up' | 'down'>>({})
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
@@ -244,7 +246,14 @@ export function MessageList({ events, onOpenArtifacts, onOpenChanges, onEditUser
                     <img src="/SoulBuddy.png" alt="SoulBuddy" width={32} height={32} style={{borderRadius:'50%'}} />
                   </div>
                   <div className="body-wrap">
-                    <div className="role-name">SoulBuddy</div>
+                    <div className="role-name">
+                      SoulBuddy
+                      {expert && (
+                        <span className="role-expert-badge" style={{ background: expert.color + '22', color: expert.color, borderColor: expert.color + '44' }}>
+                          {expert.name}
+                        </span>
+                      )}
+                    </div>
                     <Markdown text={it.text} />
 
                     {showActions && (

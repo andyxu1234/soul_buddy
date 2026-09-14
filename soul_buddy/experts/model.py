@@ -28,6 +28,7 @@ class Expert:
     enabled: bool = True
     color: str = "#7c3aed"
     kb_ids: list[str] = field(default_factory=list)   # 绑定的资料库(可多个)
+    replace_core: bool = False  # True=替换核心身份, False=叠加
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
 
@@ -40,6 +41,7 @@ class Expert:
             "enabled": self.enabled,
             "color": self.color,
             "kb_ids": list(self.kb_ids),
+            "replace_core": self.replace_core,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -51,6 +53,7 @@ class Expert:
             "id": d["id"], "name": d["name"], "role": d["role"],
             "systemPrompt": d["system_prompt"], "enabled": d["enabled"],
             "color": d["color"], "kbIds": d["kb_ids"],
+            "replaceCore": d["replace_core"],
             "createdAt": d["created_at"], "updatedAt": d["updated_at"],
         }
 
@@ -64,6 +67,7 @@ class Expert:
             enabled=bool(d.get("enabled", True)),
             color=str(d.get("color", "#7c3aed")),
             kb_ids=[str(k) for k in d.get("kb_ids", [])],
+            replace_core=bool(d.get("replace_core", False)),
             created_at=float(d.get("created_at", time.time())),
             updated_at=float(d.get("updated_at", time.time())),
         )
@@ -76,7 +80,8 @@ class Expert:
 def load_expert_file(path: Path) -> Expert | None:
     """读单个专家 JSON;损坏文件返回 None(启动不被一个坏文件拖垮)。"""
     try:
-        d = json.loads(path.read_text(encoding="utf-8"))
+        # utf-8-sig 容错 BOM(PowerShell Set-Content 会加 BOM)
+        d = json.loads(path.read_text(encoding="utf-8-sig"))
         return Expert.from_dict(d)
     except Exception:
         return None

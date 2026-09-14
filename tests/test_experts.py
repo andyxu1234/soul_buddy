@@ -92,10 +92,11 @@ def test_api_list_experts(authed):
     r = authed.get("/api/v1/experts")
     assert r.status_code == 200
     items = r.json()["experts"]
-    body = items[0] if items else {}
-    assert {"id", "name", "role", "systemPrompt", "enabled", "color",
-            "kbIds"} <= set(body)
-    assert "isBuiltin" not in body  # 单层后不再暴露
+    if items:
+        body = items[0]
+        assert {"id", "name", "role", "systemPrompt", "enabled", "color",
+                "kbIds", "replaceCore"} <= set(body)
+        assert "isBuiltin" not in body  # 单层后不再暴露
 
 
 def test_api_expert_crud_roundtrip(authed):

@@ -58,21 +58,21 @@ export function ExpertPanel({ onToast }: Props) {
   const handleSave = async (fields: {
     id: string | null
     name: string; role: string; systemPrompt: string; color: string
-    kbIds: string[]
+    kbIds: string[]; replaceCore: boolean
   }) => {
     try {
       if (fields.id) {
         const updated = await api.updateExpert(fields.id, {
           name: fields.name, role: fields.role,
           systemPrompt: fields.systemPrompt, color: fields.color,
-          kbIds: fields.kbIds,
+          kbIds: fields.kbIds, replaceCore: fields.replaceCore,
         })
         setExperts((prev) => prev.map((e) => (e.id === fields.id ? updated : e)))
       } else {
         const created = await api.createExpert({
           name: fields.name, role: fields.role,
           systemPrompt: fields.systemPrompt, color: fields.color,
-          kbIds: fields.kbIds,
+          kbIds: fields.kbIds, replaceCore: fields.replaceCore,
         })
         setExperts((prev) => [...prev, created])
       }
@@ -171,6 +171,7 @@ interface SaveFields {
   systemPrompt: string
   color: string
   kbIds: string[]
+  replaceCore: boolean
 }
 
 function ExpertForm({
@@ -187,6 +188,7 @@ function ExpertForm({
   const [prompt, setPrompt] = useState(expert?.systemPrompt ?? '')
   const [color, setColor] = useState(expert?.color ?? '#7c3aed')
   const [kbIds, setKbIds] = useState<string[]>(expert?.kbIds ?? [])
+  const [replaceCore, setReplaceCore] = useState(expert?.replaceCore ?? false)
   const [kbs, setKbs] = useState<KbRow[]>([])
 
   useEffect(() => {
@@ -212,6 +214,7 @@ function ExpertForm({
       systemPrompt: prompt.trim(),
       color,
       kbIds,
+      replaceCore,
     })
   }
 
@@ -261,6 +264,35 @@ function ExpertForm({
               onChange={(e) => setPrompt(e.target.value)}
             />
             <div className="field-hint">这段 prompt 会作为 system message 发送给模型（绑定专家的会话生效）</div>
+          </div>
+          <div className="field">
+            <label className="field-label">角色模式</label>
+            <div className="radio-group">
+              <label className="radio-item">
+                <input
+                  type="radio"
+                  name="replaceCore"
+                  checked={!replaceCore}
+                  onChange={() => setReplaceCore(false)}
+                />
+                <div>
+                  <div className="radio-label">叠加模式</div>
+                  <div className="radio-desc">保留 SoulBuddy 核心身份，专家设定追加在后。适合编码/架构类专家。</div>
+                </div>
+              </label>
+              <label className="radio-item">
+                <input
+                  type="radio"
+                  name="replaceCore"
+                  checked={replaceCore}
+                  onChange={() => setReplaceCore(true)}
+                />
+                <div>
+                  <div className="radio-label">替换模式</div>
+                  <div className="radio-desc">用专家 prompt 完全替换核心身份。适合面试官/考官等非编码角色。</div>
+                </div>
+              </label>
+            </div>
           </div>
           <div className="field">
             <label className="field-label">颜色标识</label>

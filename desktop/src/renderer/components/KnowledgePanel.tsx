@@ -185,6 +185,7 @@ export function KnowledgePanel({ onToast }: Props) {
             <p>上传本地文档，绑定专家后即可基于文档问答、出题、拷打</p>
           </div>
         </div>
+
         <div className="kb-topbar-actions">
           <select
             className="field-input kb-kbselect"
@@ -220,80 +221,80 @@ export function KnowledgePanel({ onToast }: Props) {
       </div>
 
       <div className="plugin-body scroll">
-        <div className="kb-searchbar">
-          <input
-            type="search"
-            className="field-input"
-            placeholder="在当前资料库中检索（回车）"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') void handleSearch() }}
-          />
-          <button onClick={() => void handleSearch()} disabled={searching || !searchQuery.trim()}>
-            {searching ? '检索中…' : '检索'}
-          </button>
-        </div>
+          <div className="kb-searchbar">
+            <input
+              type="search"
+              className="field-input"
+              placeholder="在当前资料库中检索（回车）"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void handleSearch() }}
+            />
+            <button onClick={() => void handleSearch()} disabled={searching || !searchQuery.trim()}>
+              {searching ? '检索中…' : '检索'}
+            </button>
+          </div>
 
-        {searchHits !== null && (
-          <div className="kb-search-results">
-            {searchHits.length === 0 && <div className="kb-search-empty">没有检索到相关内容</div>}
-            {searchHits.map((h, i) => (
-              <div key={i} className="kb-hit">
-                <div className="kb-hit-src">
-                  [{i + 1}] {h.doc_name}{h.heading_path ? ` > ${h.heading_path}` : ''}
-                  <span className="kb-hit-score">{h.score.toFixed(3)}</span>
+          {searchHits !== null && (
+            <div className="kb-search-results">
+              {searchHits.length === 0 && <div className="kb-search-empty">没有检索到相关内容</div>}
+              {searchHits.map((h, i) => (
+                <div key={i} className="kb-hit">
+                  <div className="kb-hit-src">
+                    [{i + 1}] {h.doc_name}{h.heading_path ? ` > ${h.heading_path}` : ''}
+                    <span className="kb-hit-score">{h.score.toFixed(3)}</span>
+                  </div>
+                  <div className="kb-hit-text">{h.text}</div>
                 </div>
-                <div className="kb-hit-text">{h.text}</div>
+              ))}
+            </div>
+          )}
+
+          <div className="plugin-list">
+            {docs.map((doc) => (
+              <div key={doc.id} className={`plugin-row ${doc.status === 'failed' ? 'disabled' : ''}`}>
+                <div className="plugin-row-avatar kb-doc-avatar">
+                  {doc.ext.replace('.', '').toUpperCase().slice(0, 4) || 'DOC'}
+                </div>
+                <div className="plugin-row-info">
+                  <div className="plugin-row-name">
+                    {doc.filename}
+                    <span className={`plugin-badge kb-status-${doc.status}`}>
+                      {STATUS_LABEL[doc.status] ?? doc.status}
+                    </span>
+                    {doc.status === 'ready' && (
+                      <span className="plugin-row-sub">{doc.chunk_count} 分块</span>
+                    )}
+                  </div>
+                  <div className="plugin-row-sub">{fmtSize(doc.size_bytes)}</div>
+                  {doc.status === 'failed' && doc.error && (
+                    <div className="plugin-row-prompt kb-err" title={doc.error}>{doc.error}</div>
+                  )}
+                </div>
+                <div className="plugin-row-actions">
+                  {doc.status !== 'ready' && doc.status !== 'failed' && <span className="spinner" />}
+                  {doc.status === 'failed' && (
+                    <button className="ibtn" title="重新索引" onClick={() => void handleReindex(doc)}>
+                      <Icon name="sparkles" size={14} />
+                    </button>
+                  )}
+                  <button className="ibtn" title="删除" onClick={() => void handleDeleteDoc(doc)}>
+                    <Icon name="trash" size={14} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
-        )}
 
-        <div className="plugin-list">
-          {docs.map((doc) => (
-            <div key={doc.id} className={`plugin-row ${doc.status === 'failed' ? 'disabled' : ''}`}>
-              <div className="plugin-row-avatar kb-doc-avatar">
-                {doc.ext.replace('.', '').toUpperCase().slice(0, 4) || 'DOC'}
-              </div>
-              <div className="plugin-row-info">
-                <div className="plugin-row-name">
-                  {doc.filename}
-                  <span className={`plugin-badge kb-status-${doc.status}`}>
-                    {STATUS_LABEL[doc.status] ?? doc.status}
-                  </span>
-                  {doc.status === 'ready' && (
-                    <span className="plugin-row-sub">{doc.chunk_count} 分块</span>
-                  )}
-                </div>
-                <div className="plugin-row-sub">{fmtSize(doc.size_bytes)}</div>
-                {doc.status === 'failed' && doc.error && (
-                  <div className="plugin-row-prompt kb-err" title={doc.error}>{doc.error}</div>
-                )}
-              </div>
-              <div className="plugin-row-actions">
-                {doc.status !== 'ready' && doc.status !== 'failed' && <span className="spinner" />}
-                {doc.status === 'failed' && (
-                  <button className="ibtn" title="重新索引" onClick={() => void handleReindex(doc)}>
-                    <Icon name="sparkles" size={14} />
-                  </button>
-                )}
-                <button className="ibtn" title="删除" onClick={() => void handleDeleteDoc(doc)}>
-                  <Icon name="trash" size={14} />
-                </button>
-              </div>
+          {!loading && docs.length === 0 && (
+            <div className="plugin-empty">
+              <Icon name="book" size={28} />
+              <p>这个资料库还是空的</p>
+              <span>支持 .md / .txt / .pdf / .docx，上传后自动分块并向量化</span>
             </div>
-          ))}
+          )}
+          {loading && <div className="plugin-empty"><p>加载中…</p></div>}
         </div>
-
-        {!loading && docs.length === 0 && (
-          <div className="plugin-empty">
-            <Icon name="book" size={28} />
-            <p>这个资料库还是空的</p>
-            <span>支持 .md / .txt / .pdf / .docx，上传后自动分块并向量化</span>
-          </div>
-        )}
-        {loading && <div className="plugin-empty"><p>加载中…</p></div>}
-      </div>
     </div>
   )
 }

@@ -79,7 +79,7 @@ const NAV_SOON = [
   { icon: 'zap', label: '自动化' },
 ] as const
 
-export type NavView = 'chat' | 'skills' | 'expert' | 'mcp' | 'knowledge'
+export type NavView = 'chat' | 'skills' | 'expert' | 'mcp' | 'knowledge' | 'attu'
 
 export function SessionList({
   sessions, selectedId, runningIds, collapsed,
@@ -225,6 +225,15 @@ export function SessionList({
         >
           <span className="ni-icon"><Icon name="book" size={16} /></span>
           <span className="ni-label">资料库</span>
+        </button>
+
+        <button
+          className={`nav-item ${activeView === 'attu' ? 'active' : ''}`}
+          onClick={() => onViewChange?.('attu')}
+          title="Milvus Attu"
+        >
+          <span className="ni-icon"><Icon name="database" size={16} /></span>
+          <span className="ni-label">Milvus Attu</span>
         </button>
 
         {NAV_SOON.map((n) => (

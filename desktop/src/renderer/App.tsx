@@ -8,6 +8,7 @@ import { SettingsModal } from './components/SettingsModal'
 import { SkillsPanel } from './components/SkillsPanel'
 import { ExpertPanel } from './components/ExpertPanel'
 import { KnowledgePanel } from './components/KnowledgePanel'
+import { AttuPanel } from './components/AttuPanel'
 import { McpPanel } from './components/McpPanel'
 import { NewTaskModal, RenameModal, ConfirmModal } from './components/NewTaskModal'
 import { Icon } from './components/Icon'
@@ -435,6 +436,8 @@ export default function App() {
         <ExpertPanel onToast={pushToast} />
       ) : activeView === 'knowledge' ? (
         <KnowledgePanel onToast={pushToast} />
+      ) : activeView === 'attu' ? (
+        <AttuPanel />
       ) : activeView === 'mcp' ? (
         <McpPanel onToast={pushToast} />
       ) : (

@@ -309,6 +309,14 @@ class Runtime:
         # Per-session provider override: "auto" or empty falls back to global default.
         session_provider = session.provider if session.provider and session.provider != "auto" else self.settings.provider
         provider = select_provider(self.settings, force_name=session_provider)
+        # 专家绑定(s18):先加载专家,因为 replace_core 专家需要替换 role 段
+        expert = self.experts.get(getattr(session, "expert_id", None))
+        if expert is not None and not expert.enabled:
+            expert = None
+        # replace_core 专家:用专家 system_prompt 替换默认的核心身份
+        role_override = None
+        if expert is not None and expert.replace_core and expert.system_prompt:
+            role_override = expert.system_prompt
         # P0-1: wire the L4 summary layer to the session's provider — without
         # it, long sessions degrade to pure truncation and lose intent.
         context = build_context_layer(
@@ -317,6 +325,7 @@ class Runtime:
                 "context_event", {"name": name, **data}),
             memory=self.memory_manager,
             audit=self.audit,
+            role_override=role_override,
         )
         # P5: skills — user-level (~/.soul_buddy/skills) + project-level
         skills = SkillRegistry(workspace_root=session.workspace_root,
@@ -335,13 +344,6 @@ class Runtime:
         runner_factory = (lambda settings=self.settings, audit=self.audit,
                           storage=self.storage:
                           SubAgentRunner(settings, audit, storage))
-        # Per-session provider override: "auto" or empty falls back to global default.
-        session_provider = session.provider if session.provider and session.provider != "auto" else self.settings.provider
-        provider = select_provider(self.settings, force_name=session_provider)
-        # 专家绑定(s18):会话 expert_id -> 专家包;禁用的专家不生效。
-        expert = self.experts.get(getattr(session, "expert_id", None))
-        if expert is not None and not expert.enabled:
-            expert = None
         # 资料库绑定:专家 kb_ids 里仍然存在的库 -> 检索链路(依赖 embedding 配置)。
         kb_summary = None
         knowledge = None
@@ -353,6 +355,8 @@ class Runtime:
                     and self.kb_retriever.available():
                 knowledge = self.kb_retriever
                 kb_summary = kb_usage_summary(kb_names)
+        # replace_core 专家:不再追加 expert_block,因为已经替换了 role 段
+        # 非 replace_core 专家:保留叠加模式,追加 expert_block
         return SoulAgent(self.storage, self.registry, self.events, self.audit,
                          provider, policy, context=context,
                          memory=self.memory_manager, skills=skills,

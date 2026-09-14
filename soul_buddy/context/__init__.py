@@ -91,8 +91,14 @@ def build_context_layer(
     register_base_segments: bool = True,
     memory=None,
     audit=None,
+    role_override: str | None = None,
 ) -> ContextLayer:
-    """Construct a ready-to-use ContextLayer with the base system segments."""
+    """Construct a ready-to-use ContextLayer with the base system segments.
+
+    role_override: 传入专家的 system_prompt 时,替换默认的核心身份段。
+    用于 replace_core=True 的专家(如面试官/考官),他们的角色与"写代码的 agent"
+    根本不同,叠加会冲突。None = 用 SYSTEM_PROMPT.md 的默认身份。
+    """
     compact = CompactController(
         summary_provider=summary_provider,
         on_event=on_event,
@@ -100,17 +106,17 @@ def build_context_layer(
     )
     planner = PromptPlanner(budget_chars=budget_chars)
     if register_base_segments:
-        planner.register(
-            "role",
-            lambda: ("You are soul_buddy, a local coding agent confined to a single "
-                     "workspace. Operate only within the workspace, call tools to get "
-                     "real results, and finish with a concise answer."),
-            priority=100, budget_priority=100,
-        )
-        planner.register(
-            "tools",
-            lambda: ("Tools: bash, read_file, write_file, edit_file, glob, grep. "
-                     "Prefer tools over guessing."),
-            priority=90, budget_priority=90,
-        )
+        if role_override:
+            planner.register(
+                "role",
+                lambda: role_override,
+                priority=100, budget_priority=100,
+            )
+        else:
+            from ..prompts import get_system_prompt
+            planner.register(
+                "role",
+                lambda: get_system_prompt()[0],
+                priority=100, budget_priority=100,
+            )
     return ContextLayer(compact, planner, memory=memory, audit=audit)

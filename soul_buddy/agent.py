@@ -671,12 +671,16 @@ class SoulAgent:
             if sub_index:
                 text = f"{text}\n\n{sub_index}"
                 parts["subagents"] = sub_index
-        # s18: 专家包 — 追加在 skills/subagents 之后,叠加而非替换核心身份。
-        if self.expert is not None:
+        # s18: 专家包 — replace_core 专家已经替换了 role 段,不再追加;
+        # 叠加专家追加在 skills/subagents 之后,不覆盖核心身份。
+        if self.expert is not None and not self.expert.replace_core:
             from .experts import expert_block
             eblock = expert_block(self.expert, kb_summary=self.kb_summary)
             text = f"{text}\n\n{eblock}"
             parts["expert"] = eblock
+            log.info("expert injected (overlay): %s", self.expert.name)
+        elif self.expert is not None and self.expert.replace_core:
+            log.info("expert injected (replace_core): %s", self.expert.name)
         # P5: MCP connector summary — injects a short block so the model
         # knows *what* external tools are available and when to use them.
         mcp_block = self._mcp_block()

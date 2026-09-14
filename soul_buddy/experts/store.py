@@ -49,11 +49,12 @@ class ExpertStore:
 
     def create(self, name: str, role: str = "", system_prompt: str = "",
                color: str = "#7c3aed", kb_ids: list[str] | None = None,
-               enabled: bool = True) -> Expert:
+               enabled: bool = True, replace_core: bool = False) -> Expert:
         now = time.time()
         exp = Expert(id=new_expert_id(), name=name.strip() or "未命名专家",
                      role=role.strip(), system_prompt=system_prompt,
                      enabled=enabled, color=color, kb_ids=list(kb_ids or []),
+                     replace_core=replace_core,
                      created_at=now, updated_at=now)
         self.user_dir.mkdir(parents=True, exist_ok=True)
         (self.user_dir / f"{exp.id}.json").write_text(
@@ -67,7 +68,7 @@ class ExpertStore:
             return None
         allowed = {k: v for k, v in fields.items()
                    if k in ("name", "role", "system_prompt", "color",
-                            "kb_ids", "enabled")}
+                            "kb_ids", "enabled", "replace_core")}
         updated = current.with_updates(**allowed)
         self.user_dir.mkdir(parents=True, exist_ok=True)
         (self.user_dir / f"{expert_id}.json").write_text(
@@ -87,4 +88,4 @@ class ExpertStore:
 
 def _dump(exp: Expert) -> str:
     import json
-    return json.dumps(exp.to_dict(), ensure_ascii=False, indent=2)
+    return json.dumps(exp.to_dict(), ensure_ascii=False, indent=2) + "\n"
