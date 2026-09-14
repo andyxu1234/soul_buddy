@@ -148,8 +148,7 @@ export function PlusMenu({ onInsertSkill, onExpertPick, onToast, workspaceRoot, 
                       >
                         <span className="psr-dot" style={{ background: e.color }} />
                         <span className="psr-name">{e.name}</span>
-                        {e.isBuiltin && <span className="psr-src">内置</span>}
-                        {!e.isBuiltin && <span className="psr-src">用户</span>}
+                        <span className="psr-src">{e.role}</span>
                         {currentExpertId === e.id && <Icon name="check" size={12} />}
                       </button>
                     ))}

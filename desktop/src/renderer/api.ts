@@ -185,7 +185,6 @@ export interface ExpertRow {
   enabled: boolean
   color: string
   kbIds: string[]
-  isBuiltin: boolean
   createdAt: number
   updatedAt: number
 }

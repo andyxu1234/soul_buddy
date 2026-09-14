@@ -112,7 +112,6 @@ export function ExpertPanel({ onToast }: Props) {
               <div className="plugin-row-info">
                 <div className="plugin-row-name">
                   {expert.name}
-                  {expert.isBuiltin && <span className="plugin-badge">内置</span>}
                   {!expert.enabled && <span className="plugin-badge disabled">已禁用</span>}
                 </div>
                 <div className="plugin-row-sub">{expert.role}</div>
@@ -132,11 +131,9 @@ export function ExpertPanel({ onToast }: Props) {
                   />
                   <span className="plugin-switch-slider" />
                 </label>
-                {!expert.isBuiltin && (
-                  <button className="ibtn" title="删除" onClick={() => void handleDelete(expert)}>
-                    <Icon name="trash" size={14} />
-                  </button>
-                )}
+                <button className="ibtn" title="删除" onClick={() => void handleDelete(expert)}>
+                  <Icon name="trash" size={14} />
+                </button>
               </div>
             </div>
           ))}

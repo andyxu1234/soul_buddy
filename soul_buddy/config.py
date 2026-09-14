@@ -120,13 +120,8 @@ def _builtin_subagents_dir() -> Path:
 
 BUILTIN_SUBAGENTS_DIR = _builtin_subagents_dir()
 
-# --- Experts(s18:预设角色包,两层:builtin < user) ---------------------------
-EXPERTS_DIR = HOME / "experts"             # user-level: <home>/experts/<id>.json
-
-def _builtin_experts_dir() -> Path:
-    return Path(__file__).parent / "experts" / "builtin"
-
-BUILTIN_EXPERTS_DIR = _builtin_experts_dir()
+# --- Experts(s18:预设角色包,单层 user) --------------------------------------
+EXPERTS_DIR = HOME / "experts"             # <home>/experts/<id>.json
 
 # --- Knowledge base(资料库/RAG) ----------------------------------------------
 KB_DIR = HOME / "kb"                       # <home>/kb/{kb.db, milvus.db, uploads/<kb_id>/}
