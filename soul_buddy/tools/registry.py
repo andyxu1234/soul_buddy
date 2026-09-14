@@ -15,7 +15,7 @@ from ..models import ToolResult
 from ..permissions.scope import WorkspaceScope
 from ..skills.tool import SKILL_TOOL_SPEC, run_use_skill
 from ..subagents.tool import TASK_TOOL_SPEC, run_task
-from . import bash, fs, memory, present, rollback
+from . import bash, fs, knowledge, memory, present, rollback
 
 
 @dataclass
@@ -34,6 +34,8 @@ class ToolContext:
     subagent_registry: object = None  # Sub-agent registry (None = sub-agents disabled)
     subagent_runner: object = None    # callable() -> SubAgentRunner factory
     memory: object = None             # MemoryManager (None = memory tools disabled)
+    knowledge: object = None          # KnowledgeRetriever (None = search_knowledge 不可用)
+    kb_ids: list[str] | None = None   # 会话专家绑定的资料库 id 列表
     _parent_session: object = None    # 父 session,供 task 工具读取
     _parent_provider: object = None   # 父 provider,供 task 工具继承
     _parent_tools: object = None      # 父 ToolRegistry,供 task 工具收窄
@@ -54,6 +56,7 @@ _TOOL_HANDLERS = {
     "task": run_task,
     "save_user_preference": memory.run_save_user_preference,
     "write_workspace_fact": memory.run_write_workspace_fact,
+    "search_knowledge": knowledge.run_search_knowledge,
 }
 
 _TOOL_SPECS = [
@@ -211,6 +214,7 @@ _TOOL_SPECS = [
     TASK_TOOL_SPEC,
     memory.SAVE_USER_PREF_SPEC,
     memory.WRITE_WORKSPACE_FACT_SPEC,
+    knowledge.SEARCH_KNOWLEDGE_SPEC,
 ]
 
 

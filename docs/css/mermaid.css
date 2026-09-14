@@ -1,0 +1,8 @@
+/* mermaid 渲染结果容器（由 docs/js/mermaid-init.js 生成） */
+.mermaid-svg {
+  overflow-x: auto;
+  padding: 8px 4px;
+  margin: 0.8em 0;
+  text-align: center;
+}
+.mermaid-svg svg { max-width: 100%; height: auto; }

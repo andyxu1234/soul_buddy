@@ -2,7 +2,7 @@ interface SoulApi {
   getBase: () => string
   listSessions: () => Promise<unknown>
   createSession: (workspace_root: string, cwd?: string, title?: string) => Promise<unknown>
-  updateSession: (sessionId: string, fields: { title?: string; provider?: string }) => Promise<unknown>
+  updateSession: (sessionId: string, fields: { title?: string; provider?: string; expert_id?: string | null }) => Promise<unknown>
   deleteSession: (sessionId: string) => Promise<unknown>
   getHistory: (sessionId: string) => Promise<unknown>
   startRun: (sessionId: string, prompt: string) => Promise<unknown>
@@ -23,6 +23,17 @@ interface SoulApi {
   listMemoryItems: (layer: string, workspaceRoot?: string) => Promise<unknown>
   getMemoryFiles: () => Promise<unknown>
   deleteMemoryItem: (layer: string, key: string, workspaceRoot?: string) => Promise<unknown>
+  listExperts: () => Promise<unknown>
+  createExpert: (fields: Record<string, unknown>) => Promise<unknown>
+  updateExpert: (expertId: string, fields: Record<string, unknown>) => Promise<unknown>
+  deleteExpert: (expertId: string) => Promise<unknown>
+  listKnowledgeBases: () => Promise<unknown>
+  createKnowledgeBase: (name: string, description: string) => Promise<unknown>
+  deleteKnowledgeBase: (kbId: string) => Promise<unknown>
+  listKbDocuments: (kbId: string) => Promise<unknown>
+  deleteKbDocument: (kbId: string, docId: string) => Promise<unknown>
+  reindexKbDocument: (kbId: string, docId: string) => Promise<unknown>
+  kbSearch: (query: string, kbIds?: string[], topK?: number) => Promise<unknown>
 }
 
 /** Native helpers bridged from the main process (no Node in the renderer). */
@@ -59,7 +70,7 @@ export const api = {
   listSessions: () => getSoul().listSessions() as Promise<any[]>,
   createSession: (workspace_root: string, cwd?: string, title?: string) =>
     getSoul().createSession(workspace_root, cwd, title) as Promise<any>,
-  updateSession: (sid: string, fields: { title?: string; provider?: string }) =>
+  updateSession: (sid: string, fields: { title?: string; provider?: string; expert_id?: string | null }) =>
     getSoul().updateSession(sid, fields) as Promise<any>,
   deleteSession: (sid: string) =>
     getSoul().deleteSession(sid) as Promise<any>,
@@ -99,6 +110,84 @@ export const api = {
   }>,
   deleteMemoryItem: (layer: string, key: string, workspaceRoot?: string) =>
     getSoul().deleteMemoryItem(layer, key, workspaceRoot) as Promise<{ status: string; layer: string; key: string }>,
+  listExperts: () =>
+    getSoul().listExperts() as Promise<{ experts: ExpertRow[] }>,
+  createExpert: (fields: {
+    name: string; role?: string; systemPrompt?: string; color?: string;
+    kbIds?: string[]; enabled?: boolean
+  }) => getSoul().createExpert(fields) as Promise<ExpertRow>,
+  updateExpert: (expertId: string, fields: {
+    name?: string; role?: string; systemPrompt?: string; color?: string;
+    kbIds?: string[]; enabled?: boolean
+  }) => getSoul().updateExpert(expertId, fields) as Promise<ExpertRow>,
+  deleteExpert: (expertId: string) =>
+    getSoul().deleteExpert(expertId) as Promise<{ status: string; expert_id: string }>,
+  listKnowledgeBases: () =>
+    getSoul().listKnowledgeBases() as Promise<{ kbs: KbRow[] }>,
+  createKnowledgeBase: (name: string, description: string) =>
+    getSoul().createKnowledgeBase(name, description) as Promise<KbRow>,
+  deleteKnowledgeBase: (kbId: string) =>
+    getSoul().deleteKnowledgeBase(kbId) as Promise<{ status: string; kb_id: string }>,
+  listKbDocuments: (kbId: string) =>
+    getSoul().listKbDocuments(kbId) as Promise<{ documents: KbDocumentRow[] }>,
+  deleteKbDocument: (kbId: string, docId: string) =>
+    getSoul().deleteKbDocument(kbId, docId) as Promise<{ status: string; doc_id: string }>,
+  reindexKbDocument: (kbId: string, docId: string) =>
+    getSoul().reindexKbDocument(kbId, docId) as Promise<KbDocumentRow>,
+  /** multipart 上传：renderer 直连 sidecar（cookie 鉴权同 EventSource 先例） */
+  uploadKbDocuments: async (kbId: string, files: File[]) => {
+    const fd = new FormData()
+    for (const f of files) fd.append('files', f, f.name)
+    const res = await fetch(`${getSoul().getBase()}/api/v1/kb/${encodeURIComponent(kbId)}/documents`,
+      { method: 'POST', credentials: 'include', body: fd })
+    const text = await res.text()
+    if (!res.ok) {
+      let detail: unknown = text
+      try { detail = JSON.parse(text).detail } catch { /* raw */ }
+      throw { status: res.status, detail } as ApiErrorShape
+    }
+    return JSON.parse(text) as { documents: KbDocumentRow[]; rejected: Array<{ filename: string; reason: string }> }
+  },
+  kbSearch: (query: string, kbIds?: string[], topK?: number) =>
+    getSoul().kbSearch(query, kbIds, topK) as Promise<{
+      results: Array<{ doc_name: string; heading_path: string; text: string; score: number }>
+      count: number
+    }>,
+}
+
+interface ApiErrorShape { status: number; detail: unknown }
+
+export interface KbRow {
+  id: string
+  name: string
+  description: string
+  document_count: number
+  created_at: number
+}
+
+export interface KbDocumentRow {
+  id: string
+  kb_id: string
+  filename: string
+  ext: string
+  size_bytes: number
+  status: 'pending' | 'parsing' | 'chunking' | 'embedding' | 'indexing' | 'ready' | 'failed'
+  error: string | null
+  chunk_count: number
+  created_at: number
+}
+
+export interface ExpertRow {
+  id: string
+  name: string
+  role: string
+  systemPrompt: string
+  enabled: boolean
+  color: string
+  kbIds: string[]
+  isBuiltin: boolean
+  createdAt: number
+  updatedAt: number
 }
 
 export interface MemoryItemRow {

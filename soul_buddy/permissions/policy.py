@@ -24,7 +24,7 @@ from .bash_scan import scan_paths
 from .normalize import scan_hard_deny
 from .scope import WorkspaceScope
 
-READ_TOOLS = {"read_file", "glob", "grep"}
+READ_TOOLS = {"read_file", "glob", "grep", "search_knowledge"}
 WRITE_TOOLS = {"write_file", "edit_file"}
 # Declarative "present/deliver" tools — purely read existing files and tell the
 # frontend to show them. No side effects, always auto-allowed.

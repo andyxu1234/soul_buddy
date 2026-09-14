@@ -34,6 +34,8 @@ export interface SessionRecord {
   provider: string
   /** 显示名；null 时前端回退到 workspace_root 的目录名 */
   title?: string | null
+  /** 绑定专家；null = 普通会话 */
+  expert_id?: string | null
   created_at: number
   updated_at: number
 }

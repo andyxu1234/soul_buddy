@@ -51,12 +51,17 @@ Get-Process electron,python -ErrorAction SilentlyContinue | Stop-Process -Force
 
 | 文档 | 内容 | 什么时候看 |
 |---|---|---|
-| **[implementation-plan.md](./implementation-plan.md)** | 完整实施计划：架构、目录结构、关键接口签名、P0–P5 里程碑、10 条风险与规避、测试策略，**§11 需求澄清答复 A01–A26** | **动手前必读，这是主文档** |
-| **[feasibility-analysis.md](./feasibility-analysis.md)** | 架构评审：领域建模、5 个架构缺陷（含 2 个阻断级）、**9 份 ADR**、11 条不变式、工期重估与里程碑重排 | **读完计划立刻读这份** —— 修正了计划里的缺陷 |
-| **[learn-workbuddy-mapping.md](./learn-workbuddy-mapping.md)** | 章节对照表：s01–s24 每一章对应 soul_buddy 哪个模块、该抄还是该弃、属于哪个阶段 | 写每个模块时按图索骥 |
-| **[test-analysis.md](./test-analysis.md)** | 需求解析：11 个模块划分、**30 条业务规则**、**Q01–Q26 疑问 + 澄清列**、全量测试点、风险矩阵、准出标准 | **开工前看** —— 澄清已闭环，可直接读"澄清"列 |
+| **[architecture-mindmap.md](./architecture-mindmap.md)** | 项目全景思维导图：形态、内核、安全、记忆、扩展、持久化八大分支 + 目录树 + 分层架构 + 阅读路线 | **新读者从这里开始** |
+| **[implementation-plan.md](./implementation-plan.md)** | 完整实施计划：架构、目录结构、关键接口签名、P0–P5 里程碑、10 条风险与规避、测试策略，**§11 需求澄清答复 A01–A26** | 想看原始设计与演进依据时 |
+| **[feasibility-analysis.md](./feasibility-analysis.md)** | 架构评审：领域建模、5 个架构缺陷（含 2 个阻断级）、**9 份 ADR**、11 条不变式、工期重估与里程碑重排 | 读完计划立刻读这份 —— 修正了计划里的缺陷 |
+| **[agent-loop-map.md](./agent-loop-map.md)** | Agent 循环全景：主循环每个分支、权限/子代理/压缩子流程、终止路径、13 张 mermaid 图 | **想搞懂执行引擎必读** |
+| **[data-and-storage.md](./data-and-storage.md)** | 数据与存储：全部持久化资产、事件生命周期、审计链、文件历史与回滚 | 排查"数据去哪了" |
+| **[desktop-architecture.md](./desktop-architecture.md)** | 桌面端架构：进程模型、启动/关闭时序、看门狗、安全边界 | 排查启动/后端问题 |
+| **[skills-and-mcp.md](./skills-and-mcp.md)** | Skills 与 MCP：技能生命周期、权限窄化、连接器信任模型 | 写技能 / 接连接器前 |
+| **[learn-workbuddy-mapping.md](./learn-workbuddy-mapping.md)** | 章节对照表：s01–s24 每一章对应 soul_buddy 哪个模块、该抄还是该弃、属于哪个阶段 | 与教学代码对照时 |
+| **[test-analysis.md](./test-analysis.md)** | 需求解析：11 个模块划分、**30 条业务规则**、**Q01–Q26 疑问 + 澄清列**、全量测试点、风险矩阵、准出标准 | 开工前看 —— 澄清已闭环 |
 | **[test-cases.md](./test-cases.md)** | 完整用例集：**144 条**（含正常 / 异常 / 边界 / 安全 / AI 专项），无阻塞项 | 开发与自测时逐条对照 |
-| **[modules/INDEX.md](./modules/INDEX.md)** | 模块文档总览：按代码包拆分的 13 份模块 md（职责 / 文件清单 / 设计约束 / TODO），当前均标注未实现 | 写每个模块前读对应文档，实现后回填细节 |
+| **[modules/INDEX.md](./modules/INDEX.md)** | 模块文档总览：按代码包拆分的 15 份模块 md（职责 / 文件清单 / 设计约束），**全部已实现** | 改某模块前读对应文档 |
 
 > ⚠️ 评审结论：**条件可行**。技术可行，但工期原估乐观约一倍（实际 8.5–11 周全职），
 > 且动手前须接受 5 项架构修订。详见 [feasibility-analysis.md](./feasibility-analysis.md)。
@@ -71,18 +76,21 @@ Get-Process electron,python -ErrorAction SilentlyContinue | Stop-Process -Force
 
 ## 当前状态
 
+🟢 **P0–P5 已全部交付（2026-09）**：后端 9,227 行 Python + 桌面端 5,557 行 TS/TSX，
+测试 20 个文件 / 162 个用例。书站已上线 GitHub Pages。
+
 - [x] 需求确认（目标 / 形态 / 位置 / provider / 范围）
 - [x] 架构设计与可行性评估
 - [x] 详细计划 + 架构评审（5 个缺陷已识别，修订方案已给）
-- [x] **需求澄清：Q01–Q26 全部答复**（A01–A26，含 1 个真实安全缺口修补）
-- [ ] **决策：接受修订 + 确认起手式 + 准备 API key**（← 你在这里）
-- [ ] P0 骨架 + 真 LLM 跑通（含最小 storage + offline 脚本化）
-- [ ] P1 工具 + 权限（`permissions/` 顶层包 + bash 扫描）+ 审计
-- [ ] P1.5 打包 Spike（1 天，**最高优先级未知项**）
-- [ ] P2 上下文层
-- [ ] P4 Electron 桌面壳（前置到记忆层之前）
-- [ ] P3 记忆 + SQLite
-- [ ] P5 skills/MCP + 正式打包
+- [x] 需求澄清：Q01–Q26 全部答复（A01–A26，含 1 个真实安全缺口修补）
+- [x] P0 骨架 + 真 LLM 跑通（含最小 storage + offline 脚本化）
+- [x] P1 工具 + 权限（`permissions/` 顶层包 + bash 扫描）+ 审计
+- [x] P1.5 打包 Spike（PyInstaller 打包 FastAPI 验证通过）
+- [x] P2 上下文层
+- [x] P4 Electron 桌面壳（sidecar 生命周期 + 看门狗）
+- [x] P3 记忆 + SQLite
+- [x] P5 skills/MCP + 子代理 + 正式打包
+- [ ] 后续打磨（详见 [agent-loop-map.md](./agent-loop-map.md) §12 的已知缺口清单）
 
 ---
 

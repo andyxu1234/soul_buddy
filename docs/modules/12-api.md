@@ -2,7 +2,8 @@
 
 > 代码包：`soul_buddy/api/`
 > 功能模块：M9 API 与实时通道 ｜ 阶段：P0 / P1 / P5 ｜ 风险：高
-> **状态：🔴 未实现（仅文档规划）**
+> **状态：🟢 已实现（P0–P5 全部交付，2026-09）** —— 本文档保留设计期规划与约束（§3 仍然有效）；
+> 文中行数为当时估算，「§4 实现要点 / TODO」为规划清单，现状一律以代码与下列深度文档为准。
 
 ## 1. 职责定位
 FastAPI 装配：REST（sessions/runs/permissions/maintenance/shutdown）、SSE（events，snapshot-first + Last-Event-ID）、ACP（JSON-RPC）、cookie 鉴权、单 worker 断言、启动对账、优雅退出。

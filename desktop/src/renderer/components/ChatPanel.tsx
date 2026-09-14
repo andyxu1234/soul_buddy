@@ -7,6 +7,7 @@ import { Icon } from './Icon'
 import { sessionTitle } from './SessionList'
 import { PlusMenu } from './PlusMenu'
 import { PermissionDropdown } from './PermissionDropdown'
+import { ExpertSelector } from './ExpertSelector'
 import { ModelSelector } from './ModelSelector'
 import { native } from '../api'
 import { EmotionBall } from './EmotionBall'
@@ -41,6 +42,7 @@ interface Props {
   onOpenChanges: () => void
   onPermModeChange: (mode: 'default' | 'allow_all') => void
   onProviderChange: (provider: string) => void
+  onExpertChange?: (expertId: string | null) => void
   onToast: (msg: string, tone?: 'ok' | 'err' | 'info') => void
   /** 空状态下用户从居中 composer 发起新会话 */
   onStartNewSession: (prompt: string, workspaceRoot: string) => void
@@ -64,7 +66,7 @@ export function ChatPanel({
   rightPanelOpen, permMode, providers, contextUsage,
   onPromptChange, onSend, onAbort, onResolvePerm,
   onToggleRightPanel, onOpenArtifacts, onOpenChanges,
-  onPermModeChange, onProviderChange, onToast,
+  onPermModeChange, onProviderChange, onExpertChange, onToast,
   onStartNewSession, onNavigate,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -240,6 +242,10 @@ export function ChatPanel({
                       </div>
                     ) : (
                       <>
+                        <ExpertSelector
+                          current={null}
+                          onChange={(id) => onExpertChange?.(id)}
+                        />
                         <ModelSelector
                           current={session?.provider}
                           providers={providers}
@@ -394,6 +400,10 @@ export function ChatPanel({
                   <UsageRing usage={contextUsage} />
                 </button>
               )}
+              <ExpertSelector
+                current={session?.expert_id}
+                onChange={(id) => onExpertChange?.(id)}
+              />
               <ModelSelector
                 current={session?.provider}
                 providers={providers}

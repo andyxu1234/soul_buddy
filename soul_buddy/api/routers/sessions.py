@@ -39,6 +39,11 @@ async def update_session(session_id: str, body: dict,
             raise HTTPException(status_code=400,
                                 detail=f"unsupported provider: {provider}")
         updates["provider"] = provider or "auto"
+    if "expert_id" in body:
+        expert_id = body.get("expert_id") or None
+        if expert_id is not None and runtime.experts.get(expert_id) is None:
+            raise HTTPException(status_code=404, detail="expert not found")
+        updates["expert_id"] = expert_id
     if not updates:
         raise HTTPException(status_code=400, detail="no updatable field provided")
     rec = runtime.update_session(session_id, **updates)

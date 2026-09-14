@@ -1,84 +1,87 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { api, type ExpertRow, type KbRow } from '../api'
 import { Icon } from './Icon'
-
-interface ExpertItem {
-  id: string
-  name: string
-  role: string
-  systemPrompt: string
-  enabled: boolean
-  color: string
-}
-
-const DEFAULT_EXPERTS: ExpertItem[] = [
-  {
-    id: 'architect',
-    name: '架构师',
-    role: '系统设计与技术选型',
-    systemPrompt: '你是一位资深软件架构师，擅长系统设计、技术选型和性能优化。在给出建议时，请考虑可扩展性、可维护性和团队协作成本。',
-    enabled: true,
-    color: '#7c3aed',
-  },
-  {
-    id: 'frontend',
-    name: '前端专家',
-    role: 'UI 实现与交互优化',
-    systemPrompt: '你是一位精通 React/TypeScript 的前端专家，关注组件化设计、性能优化和用户体验。输出代码时优先考虑 TypeScript 类型安全。',
-    enabled: true,
-    color: '#3b82f6',
-  },
-  {
-    id: 'backend',
-    name: '后端工程师',
-    role: 'API 设计与数据建模',
-    systemPrompt: '你是一位后端工程师，熟悉 Python/FastAPI/PostgreSQL。设计 API 时遵循 RESTful 规范，关注数据一致性和接口安全性。',
-    enabled: true,
-    color: '#16a34a',
-  },
-  {
-    id: 'reviewer',
-    name: '代码审查员',
-    role: 'Code Review 与质量把控',
-    systemPrompt: '你是一位严格的代码审查员，关注代码可读性、边界条件处理、错误处理和测试覆盖。审查时按严重程度分类问题。',
-    enabled: false,
-    color: '#c2740a',
-  },
-]
 
 interface Props {
   onToast: (msg: string, tone?: 'ok' | 'err' | 'info') => void
 }
 
+function errText(e: unknown): string {
+  const anyErr = e as { detail?: unknown; status?: number }
+  if (anyErr && typeof anyErr === 'object' && 'detail' in anyErr) {
+    const d = anyErr.detail
+    if (typeof d === 'string') return d
+    if (d != null) return JSON.stringify(d)
+  }
+  return String(e)
+}
+
 export function ExpertPanel({ onToast }: Props) {
-  const [experts, setExperts] = useState<ExpertItem[]>(DEFAULT_EXPERTS)
-  const [editing, setEditing] = useState<ExpertItem | null>(null)
+  const [experts, setExperts] = useState<ExpertRow[]>([])
+  const [editing, setEditing] = useState<ExpertRow | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [loading, setLoading] = useState(true)
 
-  const toggleExpert = (id: string) => {
-    setExperts((prev) => prev.map((e) => {
-      if (e.id === id) {
-        onToast(`${e.enabled ? '已禁用' : '已启用'}：${e.name}`, 'ok')
-        return { ...e, enabled: !e.enabled }
+  const reload = useCallback(async () => {
+    try {
+      const res = await api.listExperts()
+      setExperts(res.experts)
+    } catch (e) {
+      onToast(`加载专家失败：${errText(e)}`, 'err')
+    } finally {
+      setLoading(false)
+    }
+  }, [onToast])
+
+  useEffect(() => { void reload() }, [reload])
+
+  const toggleExpert = async (expert: ExpertRow) => {
+    try {
+      const updated = await api.updateExpert(expert.id, { enabled: !expert.enabled })
+      setExperts((prev) => prev.map((e) => (e.id === expert.id ? updated : e)))
+      onToast(`${updated.enabled ? '已启用' : '已禁用'}：${updated.name}`, 'ok')
+    } catch (e) {
+      onToast(`操作失败：${errText(e)}`, 'err')
+    }
+  }
+
+  const handleDelete = async (expert: ExpertRow) => {
+    try {
+      await api.deleteExpert(expert.id)
+      onToast(`已删除：${expert.name}`, 'info')
+      void reload()
+    } catch (e) {
+      onToast(`删除失败：${errText(e)}`, 'err')
+    }
+  }
+
+  const handleSave = async (fields: {
+    id: string | null
+    name: string; role: string; systemPrompt: string; color: string
+    kbIds: string[]
+  }) => {
+    try {
+      if (fields.id) {
+        const updated = await api.updateExpert(fields.id, {
+          name: fields.name, role: fields.role,
+          systemPrompt: fields.systemPrompt, color: fields.color,
+          kbIds: fields.kbIds,
+        })
+        setExperts((prev) => prev.map((e) => (e.id === fields.id ? updated : e)))
+      } else {
+        const created = await api.createExpert({
+          name: fields.name, role: fields.role,
+          systemPrompt: fields.systemPrompt, color: fields.color,
+          kbIds: fields.kbIds,
+        })
+        setExperts((prev) => [...prev, created])
       }
-      return e
-    }))
-  }
-
-  const handleDelete = (id: string) => {
-    const expert = experts.find((e) => e.id === id)
-    setExperts((prev) => prev.filter((e) => e.id !== id))
-    onToast(`已删除：${expert?.name ?? '专家'}`, 'info')
-  }
-
-  const handleSave = (expert: ExpertItem) => {
-    setExperts((prev) => {
-      const exists = prev.some((e) => e.id === expert.id)
-      if (exists) return prev.map((e) => (e.id === expert.id ? expert : e))
-      return [...prev, expert]
-    })
-    setShowForm(false)
-    setEditing(null)
-    onToast(`已保存：${expert.name}`, 'ok')
+      setShowForm(false)
+      setEditing(null)
+      onToast(`已保存：${fields.name}`, 'ok')
+    } catch (e) {
+      onToast(`保存失败：${errText(e)}`, 'err')
+    }
   }
 
   return (
@@ -109,6 +112,7 @@ export function ExpertPanel({ onToast }: Props) {
               <div className="plugin-row-info">
                 <div className="plugin-row-name">
                   {expert.name}
+                  {expert.isBuiltin && <span className="plugin-badge">内置</span>}
                   {!expert.enabled && <span className="plugin-badge disabled">已禁用</span>}
                 </div>
                 <div className="plugin-row-sub">{expert.role}</div>
@@ -124,23 +128,30 @@ export function ExpertPanel({ onToast }: Props) {
                   <input
                     type="checkbox"
                     checked={expert.enabled}
-                    onChange={() => toggleExpert(expert.id)}
+                    onChange={() => void toggleExpert(expert)}
                   />
                   <span className="plugin-switch-slider" />
                 </label>
-                <button className="ibtn" title="删除" onClick={() => handleDelete(expert.id)}>
-                  <Icon name="trash" size={14} />
-                </button>
+                {!expert.isBuiltin && (
+                  <button className="ibtn" title="删除" onClick={() => void handleDelete(expert)}>
+                    <Icon name="trash" size={14} />
+                  </button>
+                )}
               </div>
             </div>
           ))}
         </div>
 
-        {experts.length === 0 && (
+        {!loading && experts.length === 0 && (
           <div className="plugin-empty">
             <Icon name="brain" size={28} />
             <p>还没有专家</p>
             <span>点击右上角「新建专家」创建</span>
+          </div>
+        )}
+        {loading && (
+          <div className="plugin-empty">
+            <p>加载中…</p>
           </div>
         )}
       </div>
@@ -156,29 +167,54 @@ export function ExpertPanel({ onToast }: Props) {
   )
 }
 
+interface SaveFields {
+  id: string | null
+  name: string
+  role: string
+  systemPrompt: string
+  color: string
+  kbIds: string[]
+}
+
 function ExpertForm({
   expert,
   onClose,
   onSave,
 }: {
-  expert: ExpertItem | null
+  expert: ExpertRow | null
   onClose: () => void
-  onSave: (e: ExpertItem) => void
+  onSave: (f: SaveFields) => void
 }) {
   const [name, setName] = useState(expert?.name ?? '')
   const [role, setRole] = useState(expert?.role ?? '')
   const [prompt, setPrompt] = useState(expert?.systemPrompt ?? '')
   const [color, setColor] = useState(expert?.color ?? '#7c3aed')
+  const [kbIds, setKbIds] = useState<string[]>(expert?.kbIds ?? [])
+  const [kbs, setKbs] = useState<KbRow[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    api.listKnowledgeBases()
+      .then((res) => { if (!cancelled) setKbs(res.kbs) })
+      .catch(() => { /* 资料库不可用时隐藏绑定区 */ })
+    return () => { cancelled = true }
+  }, [])
+
+  const toggleKb = (id: string) => {
+    setKbIds((prev) => (prev.includes(id)
+      ? prev.filter((x) => x !== id)
+      : [...prev, id]))
+  }
 
   const handleSubmit = () => {
     if (!name.trim()) return
     onSave({
-      id: expert?.id ?? `expert-${Date.now()}`,
+      id: expert?.id ?? null,
       name: name.trim(),
-      role: role.trim() || '自定义角色',
+      role: role.trim(),
       systemPrompt: prompt.trim(),
-      enabled: expert?.enabled ?? true,
       color,
+      kbIds,
     })
   }
 
@@ -227,7 +263,7 @@ function ExpertForm({
               placeholder="定义这个专家的行为和专长..."
               onChange={(e) => setPrompt(e.target.value)}
             />
-            <div className="field-hint">这段 prompt 会作为 system message 发送给模型</div>
+            <div className="field-hint">这段 prompt 会作为 system message 发送给模型（绑定专家的会话生效）</div>
           </div>
           <div className="field">
             <label className="field-label">颜色标识</label>
@@ -242,6 +278,24 @@ function ExpertForm({
               ))}
             </div>
           </div>
+          {kbs.length > 0 && (
+            <div className="field">
+              <label className="field-label">绑定资料库（绑定后可通过检索工具引用文档回答）</label>
+              <div className="kb-bind-list">
+                {kbs.map((k) => (
+                  <label key={k.id} className="kb-bind-item">
+                    <input
+                      type="checkbox"
+                      checked={kbIds.includes(k.id)}
+                      onChange={() => toggleKb(k.id)}
+                    />
+                    <span>{k.name}</span>
+                    <span className="plugin-row-sub">{k.document_count} 文档</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <div className="modal-foot">
           <button onClick={onClose}>取消</button>

@@ -44,7 +44,7 @@
 | s15_prompt_assembly | `s15_prompt_assembly/code.py` | `context/prompt.py` | 🟢 直抄 | P2 |
 | s16_skills_system | `s16_skills_system/code.py` | P5 skills | 🟢 直抄 | P5 |
 | s17_mcp_connectors | `s17_mcp_connectors/code.py` | P5 MCP | 🟢 直抄 | P5 |
-| s18_experts_system | `s18_experts_system/code.py` | — | ⚪ 跳过 | — |
+| s18_experts_system | `s18_experts_system/code.py` | `experts/` + `knowledge/`（P6，2026-09 补齐） | 🟡 改抄（结构化专家包/分层注入；新增资料库绑定） | P6 |
 | s19_visualizer | `s19_visualizer/code.py` | — | ⚪ 跳过（前端职责） | — |
 | s20_result_presentation | `s20_result_presentation/code.py` | `desktop/src/components/ArtifactCard.tsx` | 🟡 改抄概念 | P5 |
 | s21_sqlite_database | `s21_sqlite_database/code.py` | `memory/db.py` | 🟢 直抄 | P3 |
@@ -280,7 +280,7 @@ learn-workbuddy 里没有任何代码处理这个问题（它只有 3 个工具�
 | 章节 | 为什么跳过 | 什么时候做 |
 |---|---|---|
 | s03_deferred_loading | 工具发现，6 个工具用不上 | P5 工具数 > 15 时 |
-| s18_experts_system | 专家包，属于产品化包装 | 有明确场景再说 |
+| ~~s18_experts_system~~ | ~~专家包，属于产品化包装~~ | ✅ 已做（P6，2026-09）：场景 = 绑定资料库的「Agent 技术考官」，见 docs/modules/15-experts.md |
 | s19_visualizer | SVG widget 生成，前端职责 | P5+ |
 | s22_automation_scheduler | 定时任务，非核心 | P5+ |
 

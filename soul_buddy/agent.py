@@ -42,7 +42,9 @@ class SoulAgent:
     def __init__(self, storage, tools, events, audit, provider: Provider,
                  permissions: PermissionPolicy, context=None, memory=None,
                  skills=None, stream: bool = False,
-                 subagents=None, subagent_runner_factory=None) -> None:
+                 subagents=None, subagent_runner_factory=None,
+                 expert=None, kb_summary: str | None = None,
+                 knowledge=None, kb_ids: list[str] | None = None) -> None:
         self.storage = storage
         self.tools = tools
         self.events = events
@@ -55,6 +57,10 @@ class SoulAgent:
         self.stream = stream              # P5: emit assistant_delta SSE events
         self.subagents = subagents        # SubAgentRegistry (None = disabled)
         self.subagent_runner_factory = subagent_runner_factory  # callable() -> SubAgentRunner
+        self.expert = expert              # s18: Expert 包 (None = 普通会话)
+        self.kb_summary = kb_summary      # 专家绑定资料库的说明(kb_ids 非空才有)
+        self.knowledge = knowledge        # KnowledgeRetriever (None = 检索不可用)
+        self.kb_ids = kb_ids or []        # 会话可检索的资料库 id 列表
         self._call_counter: Counter[tuple[str, str]] = Counter()
         # Exposed so an abort can report partial progress (BR: no silent loss).
         self.modified_files: list[str] = []
@@ -122,6 +128,11 @@ class SoulAgent:
                                   {"turn": turn, "max": MAX_TURNS})
 
             tools_specs = self.tools.specs()
+            # search_knowledge 只对「专家绑定了资料库且检索链路可用」的会话暴露;
+            # 其余会话不看到该工具,handler 里的校验只是兜底。
+            if self.knowledge is None or not self.kb_ids:
+                tools_specs = [s for s in tools_specs
+                               if s.name != "search_knowledge"]
             # system prompt 每轮重组:压缩流程在轮间提取的 durable 事实块、
             # 中途 use_skill 加载的技能内容,都要能进入后续轮次的请求 (P1-7)。
             system, system_parts = self._system_prompt(session)
@@ -624,6 +635,8 @@ class SoulAgent:
             subagent_registry=self.subagents,
             subagent_runner=self.subagent_runner_factory,
             memory=self.memory,
+            knowledge=self.knowledge,
+            kb_ids=self.kb_ids,
             _parent_session=session,
             _parent_provider=self.provider,
             _parent_tools=self.tools,
@@ -658,6 +671,12 @@ class SoulAgent:
             if sub_index:
                 text = f"{text}\n\n{sub_index}"
                 parts["subagents"] = sub_index
+        # s18: 专家包 — 追加在 skills/subagents 之后,叠加而非替换核心身份。
+        if self.expert is not None:
+            from .experts import expert_block
+            eblock = expert_block(self.expert, kb_summary=self.kb_summary)
+            text = f"{text}\n\n{eblock}"
+            parts["expert"] = eblock
         # P5: MCP connector summary — injects a short block so the model
         # knows *what* external tools are available and when to use them.
         mcp_block = self._mcp_block()

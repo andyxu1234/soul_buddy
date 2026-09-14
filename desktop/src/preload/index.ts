@@ -95,6 +95,30 @@ const api = {
   deleteMemoryItem: (layer: string, key: string, workspaceRoot?: string) =>
     request('DELETE', `/api/v1/memory/items/${encodeURIComponent(layer)}/${encodeURIComponent(key)}` +
       (workspaceRoot ? `?workspace_root=${encodeURIComponent(workspaceRoot)}` : '')),
+  // Experts (s18): preset role packages, builtin < user two layers
+  listExperts: () => request('GET', '/api/v1/experts'),
+  createExpert: (fields: Record<string, unknown>) =>
+    request('POST', '/api/v1/experts', fields),
+  updateExpert: (expertId: string, fields: Record<string, unknown>) =>
+    request('PATCH', `/api/v1/experts/${encodeURIComponent(expertId)}`, fields),
+  deleteExpert: (expertId: string) =>
+    request('DELETE', `/api/v1/experts/${encodeURIComponent(expertId)}`),
+  // Knowledge base (资料库): metadata + documents (upload 走 renderer FormData)
+  listKnowledgeBases: () => request('GET', '/api/v1/kb'),
+  createKnowledgeBase: (name: string, description: string) =>
+    request('POST', '/api/v1/kb', { name, description }),
+  deleteKnowledgeBase: (kbId: string) =>
+    request('DELETE', `/api/v1/kb/${encodeURIComponent(kbId)}`),
+  listKbDocuments: (kbId: string) =>
+    request('GET', `/api/v1/kb/${encodeURIComponent(kbId)}/documents`),
+  deleteKbDocument: (kbId: string, docId: string) =>
+    request('DELETE', `/api/v1/kb/${encodeURIComponent(kbId)}/documents/${encodeURIComponent(docId)}`),
+  reindexKbDocument: (kbId: string, docId: string) =>
+    request('POST', `/api/v1/kb/${encodeURIComponent(kbId)}/documents/${encodeURIComponent(docId)}/reindex`),
+  kbSearch: (query: string, kbIds?: string[], topK?: number) =>
+    request('POST', '/api/v1/kb/search', {
+      query, ...(kbIds ? { kb_ids: kbIds } : {}), ...(topK ? { top_k: topK } : {}),
+    }),
 }
 
 // Native (main-process) helpers — no Node access from the renderer.

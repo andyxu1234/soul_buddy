@@ -7,6 +7,7 @@ import { RightPanel } from './components/RightPanel'
 import { SettingsModal } from './components/SettingsModal'
 import { SkillsPanel } from './components/SkillsPanel'
 import { ExpertPanel } from './components/ExpertPanel'
+import { KnowledgePanel } from './components/KnowledgePanel'
 import { McpPanel } from './components/McpPanel'
 import { NewTaskModal, RenameModal, ConfirmModal } from './components/NewTaskModal'
 import { Icon } from './components/Icon'
@@ -321,6 +322,17 @@ export default function App() {
       .catch((e) => pushToast(formatError(e), 'err'))
   }
 
+  const handleExpertChange = (expertId: string | null) => {
+    if (!selectedId) return
+    api.updateSession(selectedId, { expert_id: expertId })
+      .then((s) => {
+        const rec = s as SessionRecord
+        setSessions((prev) => prev.map((x) => (x.id === rec.id ? rec : x)))
+        pushToast(expertId ? '已绑定专家，下一轮生效' : '已解绑专家', 'ok')
+      })
+      .catch((e) => pushToast(formatError(e), 'err'))
+  }
+
   const handleDelete = () => {
     const target = deleteTarget
     setDeleteTarget(null)
@@ -421,6 +433,8 @@ export default function App() {
         <SkillsPanel onToast={pushToast} workspaceRoot={selected?.workspace_root} />
       ) : activeView === 'expert' ? (
         <ExpertPanel onToast={pushToast} />
+      ) : activeView === 'knowledge' ? (
+        <KnowledgePanel onToast={pushToast} />
       ) : activeView === 'mcp' ? (
         <McpPanel onToast={pushToast} />
       ) : (
@@ -447,6 +461,7 @@ export default function App() {
             onOpenChanges={() => setRightPanelOpen(true)}
             onPermModeChange={setPermMode}
             onProviderChange={handleProviderChange}
+            onExpertChange={handleExpertChange}
             onToast={pushToast}
             onStartNewSession={handleStartNewSession}
             onNavigate={(v) => setActiveView(v)}

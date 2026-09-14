@@ -37,3 +37,5 @@ site/
 .trae/
 .workbuddy/
 .soul_sandbox_home/
+build/mermaid.min.js
+.zcode/

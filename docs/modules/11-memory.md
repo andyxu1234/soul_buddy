@@ -2,7 +2,8 @@
 
 > 代码包：`soul_buddy/memory/`
 > 功能模块：M8 记忆层 ｜ 阶段：P3 ｜ 风险：低
-> **状态：🔴 未实现（仅文档规划）**
+> **状态：🟢 已实现（P0–P5 全部交付，2026-09）** —— 本文档保留设计期规划与约束（§3 仍然有效）；
+> 文中行数为当时估算，「§4 实现要点 / TODO」为规划清单，现状一律以代码与下列深度文档为准。
 
 ## 1. 职责定位
 三层记忆 recall 与注入：workspace / user / cloud。作为 PromptSegment 候选注入 system prompt。冲突优先级 user > workspace > cloud。

@@ -5,7 +5,7 @@ import { Icon } from './Icon'
 import { EmotionBall } from './EmotionBall'
 
 const SB_THEME = { body: '#3b82f6', eyes: '#0f172a' }
-import { api, native } from '../api'
+import { native } from '../api'
 
 
 
@@ -77,10 +77,9 @@ function groupByWorkspace(sessions: SessionRecord[]): Array<{
 const NAV_SOON = [
   { icon: 'folder', label: '项目' },
   { icon: 'zap', label: '自动化' },
-  { icon: 'book', label: '资料库' },
 ] as const
 
-export type NavView = 'chat' | 'skills' | 'expert' | 'mcp'
+export type NavView = 'chat' | 'skills' | 'expert' | 'mcp' | 'knowledge'
 
 export function SessionList({
   sessions, selectedId, runningIds, collapsed,
@@ -96,38 +95,6 @@ export function SessionList({
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   // 右键菜单
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; workspace: string; name: string } | null>(null)
-
-  // 导航 hover popover（Skills / MCP）
-  const [hoverPopover, setHoverPopover] = useState<null | {
-    type: 'skills' | 'mcp'
-    x: number
-    y: number
-    data: any[]
-    loading: boolean
-  }>(null)
-  const hoverTimer = useRef<number | null>(null)
-
-  const handleNavHover = async (type: 'skills' | 'mcp', e: React.MouseEvent) => {
-    if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    setHoverPopover({ type, x: rect.right + 8, y: rect.top, data: [], loading: true })
-    try {
-      if (type === 'skills') {
-        const res = await api.listSkills()
-        setHoverPopover((p) => p?.type === type ? { ...p, data: res.skills || [], loading: false } : p)
-      } else {
-        const res = await api.listConnectors()
-        setHoverPopover((p) => p?.type === type ? { ...p, data: res.connectors || [], loading: false } : p)
-      }
-    } catch {
-      setHoverPopover((p) => p ? { ...p, loading: false } : p)
-    }
-  }
-
-  const handleNavLeave = () => {
-    if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
-    hoverTimer.current = window.setTimeout(() => setHoverPopover(null), 150)
-  }
 
   // 全局关闭右键菜单
   useEffect(() => {
@@ -227,8 +194,6 @@ export function SessionList({
         <button
           className={`nav-item ${activeView === 'skills' ? 'active' : ''}`}
           onClick={() => onViewChange?.('skills')}
-          onMouseEnter={(e) => handleNavHover('skills', e)}
-          onMouseLeave={handleNavLeave}
           title="Skills"
         >
           <span className="ni-icon"><Icon name="sparkles" size={16} /></span>
@@ -247,12 +212,19 @@ export function SessionList({
         <button
           className={`nav-item ${activeView === 'mcp' ? 'active' : ''}`}
           onClick={() => onViewChange?.('mcp')}
-          onMouseEnter={(e) => handleNavHover('mcp', e)}
-          onMouseLeave={handleNavLeave}
           title="MCP"
         >
           <span className="ni-icon"><Icon name="plug" size={16} /></span>
           <span className="ni-label">MCP</span>
+        </button>
+
+        <button
+          className={`nav-item ${activeView === 'knowledge' ? 'active' : ''}`}
+          onClick={() => onViewChange?.('knowledge')}
+          title="资料库"
+        >
+          <span className="ni-icon"><Icon name="book" size={16} /></span>
+          <span className="ni-label">资料库</span>
         </button>
 
         {NAV_SOON.map((n) => (
@@ -457,57 +429,6 @@ export function SessionList({
           </button>
         </div>
       )}
-
-      {hoverPopover && (
-        <div
-          className="nav-hover-popover"
-          style={{ left: hoverPopover.x, top: hoverPopover.y }}
-          onMouseEnter={() => { if (hoverTimer.current) window.clearTimeout(hoverTimer.current) }}
-          onMouseLeave={handleNavLeave}
-        >
-          <div className="nph-title">
-            {hoverPopover.type === 'skills' ? (
-              <><Icon name="sparkles" size={12} /> Skills（{hoverPopover.data.length}）</>
-            ) : (
-              <><Icon name="plug" size={12} /> MCP（{hoverPopover.data.length}）</>
-            )}
-          </div>
-          <div className="nph-list">
-            {hoverPopover.loading && <div className="nph-empty">加载中...</div>}
-            {!hoverPopover.loading && hoverPopover.data.length === 0 && (
-              <div className="nph-empty">
-                {hoverPopover.type === 'skills' ? '暂无已安装 Skills' : '暂无 MCP 连接器'}
-              </div>
-            )}
-            {hoverPopover.data.map((item: any, i: number) => (
-              <div key={i} className="nph-row">
-                {hoverPopover.type === 'skills' ? (
-                  <>
-                    <span className="nph-dot" style={{ background: item.source === 'project' ? '#6366f1' : '#10b981' }} />
-                    <span className="nph-name">{item.title}</span>
-                    <span className="nph-src">{item.source === 'project' ? '项目' : '用户'}</span>
-                  </>
-                ) : (
-                  <>
-                    <span
-                      className={`nph-status nph-${statusClass(item.status)}`}
-                      title={item.status}
-                    />
-                    <span className="nph-name">{item.name}</span>
-                    <span className="nph-src">{item.tools?.length || 0} tools</span>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
-}
-
-function statusClass(status: string): string {
-  if (status === 'connected' || status === 'connecting') return 'ok'
-  if (status.startsWith('error')) return 'err'
-  return 'off'
 }

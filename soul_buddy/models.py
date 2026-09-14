@@ -23,18 +23,21 @@ class SessionRecord:
     cwd: str
     provider: str = "offline"
     title: str | None = None          # UI 显示名；None -> 前端回退到 basename
+    expert_id: str | None = None      # 绑定专家;None = 普通会话
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
 
     @classmethod
     def create(cls, workspace_root: str, cwd: str | None = None,
-               provider: str = "offline", title: str | None = None) -> "SessionRecord":
+               provider: str = "offline", title: str | None = None,
+               expert_id: str | None = None) -> "SessionRecord":
         return cls(
             id=new_id(),
             workspace_root=str(Path_safe(workspace_root)),
             cwd=str(Path_safe(cwd or workspace_root)),
             provider=provider,
             title=title,
+            expert_id=expert_id,
         )
 
     def to_dict(self) -> dict:
@@ -44,6 +47,7 @@ class SessionRecord:
             "cwd": self.cwd,
             "provider": self.provider,
             "title": self.title,
+            "expert_id": self.expert_id,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -56,6 +60,7 @@ class SessionRecord:
             cwd=d["cwd"],
             provider=d.get("provider", "offline"),
             title=d.get("title"),
+            expert_id=d.get("expert_id"),
             created_at=d.get("created_at", time.time()),
             updated_at=d.get("updated_at", time.time()),
         )

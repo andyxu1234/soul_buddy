@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SoulBuddy Agent 循环全景图谱</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  if (window.mermaid) {
+    window.mermaid.initialize({ startOnLoad: true, securityLevel: "loose", theme: "default" });
+  }
+});
+</script>
+<style>
+:root { --fg:#1f2328; --muted:#5b6570; --line:#e3e6ea; --bg:#ffffff; --soft:#f6f8fa; --accent:#185fa5; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg);
+  font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:14px; line-height:1.75; }
+.wrap { max-width:1080px; margin:0 auto; padding:48px 32px 96px; }
+h1 { font-size:26px; font-weight:600; margin:0 0 8px; }
+h2 { font-size:20px; font-weight:600; margin:56px 0 12px; padding-top:20px; border-top:1px solid var(--line); }
+h3 { font-size:16px; font-weight:600; margin:32px 0 8px; }
+p.lead { color:var(--muted); margin:0 0 24px; }
+code { background:var(--soft); padding:1px 5px; border-radius:4px; font-size:13px;
+  font-family:"SFMono-Regular",Consolas,monospace; }
+table { width:100%; border-collapse:collapse; margin:16px 0 8px; font-size:13px; }
+th, td { border:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top; }
+th { background:var(--soft); font-weight:600; white-space:nowrap; }
+tr:nth-child(even) td { background:#fcfdfe; }
+.mermaid { background:var(--soft); border:1px solid var(--line); border-radius:10px;
+  padding:20px; margin:16px 0 8px; overflow-x:auto; }
+.note { background:#fff8e6; border-left:3px solid #d4a017; padding:10px 14px;
+  margin:12px 0; border-radius:0 6px 6px 0; color:#5c4708; font-size:13px; }
+.toc { background:var(--soft); border:1px solid var(--line); border-radius:10px; padding:16px 24px; }
+.toc ol { margin:8px 0 0; padding-left:22px; }
+.toc a { color:var(--accent); text-decoration:none; }
+.toc a:hover { text-decoration:underline; }
+ul { padding-left:22px; }
+li { margin:3px 0; }
+.badge { display:inline-block; font-size:12px; padding:1px 7px; border-radius:10px;
+  border:1px solid var(--line); background:var(--soft); color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>SoulBuddy · Agent 循环全景图谱</h1>
+<p class="lead">
+覆盖 <code>SoulAgent.run()</code> 的全部循环、分支、出口与旁路，以及它依赖的权限、上下文、存储、子代理子系统。
+所有结论直接来自源码，标注了文件位置与关键常量。图中由 mermaid 在线渲染；离线时表格与清单同样完整可读。
+</p>
+
+<div class="toc">
+<strong>目录</strong>
+<ol>
+<li><a href="#mind">思维导图：一次 run 可能发生的所有事情</a></li>
+<li><a href="#arch">架构图：模块依赖与三条通道</a></li>
+<li><a href="#main">主循环详细流程图（含 6 个出口）</a></li>
+<li><a href="#tool">工具循环：四道闸门</a></li>
+<li><a href="#gate">权限门状态机与 5 种用户选择</a></li>
+<li><a href="#ctx">上下文治理：分层压缩 + 硬上限</a></li>
+<li><a href="#sub">子循环：sub-agent 与 L4 摘要</a></li>
+<li><a href="#seq">时序图：一次典型 run</a></li>
+<li><a href="#life">run 生命周期状态机</a></li>
+<li><a href="#events">事件字典：19 种事件与落盘/回放语义</a></li>
+<li><a href="#exit">出口清单与终止原因</a></li>
+<li><a href="#fail">失败与降级矩阵</a></li>
+<li><a href="#const">关键常量速查</a></li>
+</ol>
+</div>
+
+<h2 id="mind">1. 思维导图：一次 run 可能发生的所有事情</h2>
+<div class="mermaid">
+mindmap
+  root((一次 run))
+    启动
+      重放 transcript 重建 messages
+      技能 read_when 自动匹配并加载
+      生成 request_id 串联事件与回滚
+      RUN_STARTED
+    turn 循环 x40
+      turn 32 预算告警
+      重组 system prompt
+      上下文压缩与硬上限预检
+      provider 调用 流式或非流式
+      首轮推理守卫 最多重试2次
+      写事件 追加 raw_assistant
+      工具循环
+      结果回灌 messages
+    工具循环
+      重复调用保护 3次
+      权限四态 ALLOW ASK DENY 技能收窄
+      写工具改前快照
+      输出外置化 50KiB
+      present_files 产物卡片
+    终止出口
+      正常结束 run_finished
+      上下文超限
+      轮次用尽 max_turns
+      用户 abort
+      provider 异常
+    旁路
+      token 用量估算与校准
+      最终提示词快照
+      审计日志
+      记忆用量统计
+    子循环
+      sub-agent 独立上下文
+      L4 摘要调用
+      bash 进程树与超时
+</div>
+
+<h2 id="arch">2. 架构图：模块依赖与三条通道</h2>
+<div class="mermaid">
+flowchart TB
+  UI["Electron 渲染进程<br/>SSE 订阅 / 权限弹窗 / 产物卡片"]
+  MAIN["Electron 主进程<br/>拉起 sidecar · 心跳 5s · bootstrap token"]
+  API["FastAPI 路由层<br/>runs · sessions · permissions · events · mcp · skills · memory"]
+  RT["Runtime 装配中心<br/>storage · events · audit · registry · provider · db · gate"]
+  AG["SoulAgent 循环核心"]
+  PV["Provider 适配<br/>deepseek / openai / anthropic / offline"]
+  TR["ToolRegistry<br/>14 内置工具 + MCP 动态绑定"]
+  PM["权限层<br/>policy 规则表 + gate 队列 + 路径守卫"]
+  CX["ContextLayer<br/>分层压缩 + prompt 规划 + 外置化"]
+  ST["SessionStore JSONL 真相源"]
+  FH["FileHistory 快照 diff 回滚"]
+  MM["MemoryDB 派生索引 + AuditLog"]
+  BG["后台线程<br/>MCP 自动连接 · 索引 reconcile · 记忆投影"]
+
+  MAIN --> API
+  UI -->|HTTP| API
+  API --> RT
+  RT --> AG
+  AG --> PV
+  AG --> TR
+  AG --> PM
+  AG --> CX
+  AG --> ST
+  AG --> FH
+  AG --> MM
+  RT --> BG
+  AG -.->|SSE 推送| UI
+  AG -.->|transcript 落盘| ST
+  AG -.->|审计| MM
+</div>
+
+<h2 id="main">3. 主循环详细流程图（含 6 个出口）</h2>
+<p>源码：<code>soul_buddy/agent.py :: SoulAgent.run()</code>。循环上限 <code>MAX_TURNS=40</code>，第 32 轮发预算告警。</p>
+<div class="mermaid">
+flowchart TB
+  S["run 启动：清计数器 / modified_files / gate 标志"] --> B["bootstrap_messages 重放 transcript"]
+  B --> SK["skills.match 命中则自动加载 → SKILL_LOADED"]
+  SK --> T1["turn = 1"]
+  T1 --> W{"turn == 32 ?"}
+  W -->|是| WE["emit TURN_BUDGET_WARNING"]
+  W -->|否| SP
+  WE --> SP["重组 system prompt<br/>role+tools+memory+durable+skills+subagents+MCP+root"]
+  SP --> CP["compact_if_needed 分层压缩"]
+  CP --> HL{"硬上限预检仍超窗 ?"}
+  HL -->|是| FR["force_reduce 后复检"]
+  FR --> HL2{"仍超窗 ?"}
+  HL2 -->|是| EXIT2["出口② CONTEXT_LIMIT_EXCEEDED<br/>RUN_ABORTED context_limit_exceeded"]
+  HL2 -->|否| U
+  HL -->|否| U["旁路：token 用量估算 emit CONTEXT_USAGE"]
+  U --> PC["provider astream / create"]
+  PC --> PE{"provider 抛异常 ?"}
+  PE -->|是| EXIT5["出口⑤ 记录日志后 raise<br/>任务失败，_run finally 清理"]
+  PE -->|否| G1{"turn==1 且要调工具 ?"}
+  G1 -->|是| G2{"推理达标 长度≥20 且含分类+计划关键词 ?"}
+  G2 -->|否 且 重试&lt;2| GR["注入引导消息 → continue 下一轮"]
+  GR --> T1
+  G2 -->|是| EM
+  G1 -->|否| EM["emit REASONING / MESSAGE / FUNCTION_CALL<br/>追加 raw_assistant"]
+  EM --> D{"wants_tools ?"}
+  D -->|否| EXIT1["出口① RUN_FINISHED 正常结束"]
+  D -->|是| TL["工具循环：逐个 _execute_governed"]
+  TL --> AB{"期间被 abort ?"}
+  AB -->|是| EXIT4["出口④ CancelledError<br/>abort 端点 emit RUN_ABORTED user_abort"]
+  AB -->|否| RR["结果入 messages<br/>emit FUNCTION_CALL_RESULT / 快照 / artifact"]
+  RR --> T2["turn += 1"]
+  T2 --> TM{"turn &gt; 40 ?"}
+  TM -->|是| EXIT3["出口③ RUN_ABORTED max_turns<br/>保留副作用不回滚"]
+  TM -->|否| W
+</div>
+
+<h2 id="tool">4. 工具循环：四道闸门</h2>
+<p>源码：<code>agent.py :: _execute_governed()</code>。关键点：<b>拒绝不是终止</b>——它变成一条工具结果文本回给模型，循环继续。</p>
+<div class="mermaid">
+flowchart TB
+  C0["收到一个 ToolCall"] --> C1{"闸门一：重复调用保护<br/>工具名+参数md5 本轮已≥3次 ?"}
+  C1 -->|命中| R1["返回「已拒绝：重复执行多次」"]
+  C1 -->|未命中| P1{"闸门二：policy.decide<br/>bash 走一套 其他工具走一套"}
+  P1 -->|DENY| R2["返回「已拒绝：原因」"]
+  P1 -->|ASK| GS["emit PERMISSION_REQUEST<br/>SSE 弹窗 + gate.wait 300s"]
+  P1 -->|ALLOW| P3
+  GS --> GS2{"用户响应 / 超时 / abort"}
+  GS2 -->|超时| R3["PERMISSION_EXPIRED → 已拒绝<br/>绝不补执行"]
+  GS2 -->|deny 或 deny_rest| R4["PERMISSION_RESOLVED deny → 已拒绝"]
+  GS2 -->|allow_once / allow_dir / allow_rest| P3["闸门三：技能清单收窄<br/>loaded skill 只能更窄"]
+  GS2 -->|abort| R5["abort_pending 全部释放为 DENY"]
+  P3 -->|未声明| R6["返回「已拒绝：技能未声明」"]
+  P3 -->|通过| EX["闸门四：线程池 dispatch"]
+  EX --> EX2{"工具内部抛异常 ?"}
+  EX2 -->|是| R7["包成 ToolResult is_error=True"]
+  EX2 -->|否| OK["ToolResult 正常返回<br/>写工具携带 file_backup 快照"]
+  R1 --> RES
+  R2 --> RES
+  R3 --> RES
+  R4 --> RES
+  R5 --> RES
+  R6 --> RES
+  R7 --> RES
+  RES["结果文本回灌 messages<br/>emit FUNCTION_CALL_RESULT"] --> LOOP["继续下一个 call / 下一轮"]
+  OK --> LOOP
+</div>
+
+<h3>权限规则表（顺序敏感，首个命中即返回）</h3>
+<table>
+<tr><th>顺序</th><th>规则</th><th>结果</th><th>可记忆</th></tr>
+<tr><td>bash-1</td><td>hard_deny 正则：rm -rf / sudo / shutdown / mkfs / dd if= / format</td><td>DENY</td><td>否</td></tr>
+<tr><td>bash-2</td><td>命令内路径逃逸（重定向目标、路径型 token 越出 workspace）</td><td>DENY</td><td>否</td></tr>
+<tr><td>bash-3</td><td>含 $VAR / $( ) / 反引号 → 静态不可判定</td><td>ASK</td><td>否</td></tr>
+<tr><td>bash-4</td><td>benign 只读白名单，无写重定向、无危险子命令、无 git 写操作</td><td>ALLOW</td><td>是（目录级，30 天）</td></tr>
+<tr><td>bash-5</td><td>其余 bash</td><td>ASK</td><td>否</td></tr>
+<tr><td>tool-1</td><td>path 越出 workspace root</td><td>DENY</td><td>否</td></tr>
+<tr><td>tool-2</td><td>read_file / glob / grep</td><td>ALLOW</td><td>是</td></tr>
+<tr><td>tool-3</td><td>write_file / edit_file（改前自动快照）</td><td>ALLOW</td><td>是</td></tr>
+<tr><td>tool-4</td><td>present_files / list_changes / rollback_file / rollback_session</td><td>ALLOW</td><td>是</td></tr>
+<tr><td>tool-5</td><td>task / use_skill / save_user_preference / write_workspace_fact</td><td>ALLOW</td><td>是</td></tr>
+<tr><td>tool-6</td><td>mcp__* 外部连接器</td><td>ASK</td><td>否</td></tr>
+<tr><td>tool-7</td><td>默认兜底</td><td>DENY</td><td>否</td></tr>
+</table>
+
+<h2 id="gate">5. 权限门状态机与 5 种用户选择</h2>
+<p>源码：<code>permissions/gate.py</code>。单 FIFO 队列，run 开始重置 <code>deny_rest</code> / <code>allow_rest</code>。</p>
+<div class="mermaid">
+stateDiagram-v2
+  [*] --> Idle
+  Idle --> Pending: ASK 到来 入队并 emit
+  Idle --> DenyRest: deny_rest 生效
+  Idle --> AllowRest: allow_rest 生效
+  DenyRest --> DenyRest: 本 run 后续 ASK 直接 DENY
+  AllowRest --> AllowRest: 本 run 后续 ASK 直接 ALLOW
+  Pending --> Resolved: 用户选择 / abort
+  Pending --> Expired: 300s 超时
+  Resolved --> Idle: 出队并清理
+  Expired --> Idle: emit PERMISSION_EXPIRED<br/>返回已拒绝 绝不补执行
+  Idle --> [*]
+</div>
+<table>
+<tr><th>用户选择</th><th>动作</th><th>副作用</th></tr>
+<tr><td>allow_once</td><td>本次放行</td><td>不记忆</td></tr>
+<tr><td>allow_dir</td><td>本次放行</td><td>写入目录级规则，TTL 30 天</td></tr>
+<tr><td>allow_rest</td><td>本次放行</td><td>本 run 后续 ASK 全部自动放行</td></tr>
+<tr><td>deny</td><td>本次拒绝</td><td>无</td></tr>
+<tr><td>deny_rest</td><td>本次拒绝</td><td>本 run 后续 ASK 全部自动拒绝</td></tr>
+<tr><td>（无响应）</td><td>300s 后拒绝</td><td>emit PERMISSION_EXPIRED</td></tr>
+<tr><td>（用户 abort）</td><td>全部待决释放为 DENY</td><td>避免卡在 300s 超时后</td></tr>
+</table>
+
+<h2 id="ctx">6. 上下文治理：分层压缩 + 硬上限</h2>
+<p>源码：<code>context/compact.py</code>。触发阈值把 system + tools 固定开销算进去（P0-3），否则 skills / MCP 块大时会先撞窗口。</p>
+<div class="mermaid">
+flowchart TB
+  A["每轮估算 messages token"] --> B{"tokens + 固定开销 + 4096预留<br/>≥ 窗口 × 0.75 ?"}
+  B -->|否| Z["不压缩 原样继续"]
+  B -->|是| L1["L1 截断超长 tool_result<br/>4000 字符 head+tail · _truncated 幂等"]
+  L1 --> L2["L2 去重<br/>同路径旧 read 置 superseded · 重复 turn 组合并"]
+  L2 --> C{"已 &lt; 目标 窗口×0.5 − 开销 ?"}
+  C -->|是| Z
+  C -->|否| D{"有 summary_provider ?"}
+  D -->|否| PR["纯剪枝 prune：保留最近 N 组"]
+  D -->|是| L4["L4 摘要：保留最近 6 组<br/>其余压成摘要 + durable 事实块"]
+  L4 --> E{"摘要成功且非空 ?"}
+  E -->|否| PR2["summary_failed 事件<br/>降级剪枝 保留 N/2 组"]
+  E -->|是| HL
+  PR --> HL
+  PR2 --> HL["硬上限预检<br/>tokens + 开销 + 预留 ≥ 窗口 ?"]
+  HL -->|否| Z
+  HL -->|是| FR["force_reduce：<br/>再截断 + 只留 system+首句+最后一组"]
+  FR --> HL2{"复检仍超窗 ?"}
+  HL2 -->|否| Z
+  HL2 -->|是| STOP["CONTEXT_LIMIT_EXCEEDED<br/>受控终止 run"]
+</div>
+<div class="note">
+durable 事实块挂在 <code>CompactController</code> 上，每轮重组 system prompt 时注入 —— 被摘要冲掉的历史靠它兜底。
+外置化旁路：工具输出 &gt; 50 KiB 落盘留指针 + 2 KiB 预览；bash 输出 &gt; 20 000 字符做 head 14k + tail 5k 裁剪；
+配额超限按 LRU 驱逐，重放时对失效指针标注 <code>status="missing"</code>。
+</div>
+
+<h2 id="sub">7. 子循环：sub-agent 与 L4 摘要</h2>
+<p>源码：<code>subagents/runner.py</code>。委托本身自动放行（<code>task</code> 在白名单），副作用发生在子循环内部，那里有自己的权限层。</p>
+<div class="mermaid">
+flowchart TB
+  T["主循环调用 task 工具"] --> R["registry.get 查子代理配置"]
+  R --> NF{"存在 ?"}
+  NF -->|否| E1["返回「未找到，可用列表」"]
+  NF -->|是| PR{"model 覆盖 ?"}
+  PR -->|是| SEL["select_provider 覆盖，失败则继承父 provider"]
+  PR -->|否| NAR
+  SEL --> NAR["收窄 ToolRegistry：仅 cfg.tools<br/>并剔除 SUBAGENT_FORBIDDEN_TOOLS"]
+  NAR --> SC["独立 WorkspaceScope + PermissionPolicy"]
+  SC --> MSG["独立 messages：只塞 system + prompt"]
+  MSG --> LP["for turn in 1..max_turns 默认10"]
+  LP --> TC{"已用时 &gt; max_time_s 300 ?"}
+  TC -->|是| TO["返回截断摘要 status=error"]
+  TC -->|否| CP["compact_if_needed keep_recent=4"]
+  CP --> PV["provider.create"]
+  PV --> WT{"还要调工具 ?"}
+  WT -->|否| FIN["_parse_result 解析 JSON 摘要<br/>失败则整段塞进 summary"]
+  WT -->|是| GD["重复保护 → policy.decide"]
+  GD --> ASK{"判定为 ASK ?"}
+  ASK -->|是| DG["降级 DENY + 落审计<br/>不打扰用户"]
+  ASK -->|否| DP["派发到收窄 registry"]
+  DG --> NXT
+  DP --> NXT["结果回灌 messages"]
+  NXT --> LP
+  LP --> MX["轮次用尽 → 截断摘要"]
+  FIN --> OUT["返回 JSON：status summary artifacts findings next_steps"]
+  TO --> OUT
+  MX --> OUT
+</div>
+<p>sub-agent 六项隔离：独立 messages、独立收窄工具表、不发 SSE、不写 transcript（只落审计）、ASK 降级 DENY、禁止 <code>task</code> 递归与 <code>present_files</code> / 回滚 / 记忆写入。</p>
+
+<h2 id="seq">8. 时序图：一次典型 run</h2>
+<div class="mermaid">
+sequenceDiagram
+  participant UI as Electron UI
+  participant API as FastAPI
+  participant AG as SoulAgent
+  participant PV as Provider
+  participant TL as 工具 / 权限门
+
+  UI->>API: POST /api/v1/runs
+  API->>AG: create_task(agent.run)
+  AG->>AG: 重放 transcript + emit MESSAGE(user) + RUN_STARTED
+  AG->>PV: system + messages + tools
+  PV-->>AG: stream 文本 / 推理 chunk
+  AG-->>UI: SSE assistant_delta（sequence=0，不落盘）
+  PV-->>AG: ModelTurn（文本 + tool_calls + usage）
+  AG-->>UI: SSE message + function_call（落 transcript）
+  AG-->>UI: SSE permission_request（含覆盖预览）
+  Note over AG,UI: 循环在此挂起，最长 300s
+  UI->>API: POST permissions/resolve
+  API->>AG: gate.resolve 唤醒等待
+  AG->>TL: dispatch（线程池，不阻塞事件循环）
+  TL-->>AG: ToolResult（写操作附 file_backup）
+  AG-->>UI: SSE function_call_result + file-history-snapshot
+  AG->>AG: 结果回灌 messages，进入下一轮
+  AG-->>UI: SSE run_finished（模型不再要工具）
+</div>
+
+<h2 id="life">9. run 生命周期状态机</h2>
+<div class="mermaid">
+stateDiagram-v2
+  [*] --> Idle
+  Idle --> Running: POST /runs<br/>单 session 单 run 冲突返回 409
+  Running --> AwaitingPermission: ASK 命中
+  AwaitingPermission --> Running: resolve 或超时或 abort
+  Running --> Finished: run_finished
+  Running --> Aborted: 用户 abort / 删除 session
+  Running --> ContextStopped: 硬上限仍超窗
+  Running --> Truncated: turn 用尽 40
+  Running --> Failed: provider 抛异常
+  AwaitingPermission --> Aborted: abort_pending 释放
+  Finished --> [*]
+  Aborted --> [*]
+  ContextStopped --> [*]
+  Truncated --> [*]
+  Failed --> [*]
+</div>
+<p><code>_active_runs</code> 只登记 in-flight 任务，<code>finally</code> 中清理；<code>MAX_CONCURRENT_RUNS=4</code> 是配置常量，实际硬约束是 B10 的「每 session 同时只允许一个 run」。</p>
+
+<h2 id="events">10. 事件字典：19 种事件与落盘/回放语义</h2>
+<table>
+<tr><th>事件</th><th>落 transcript</th><th>映射回 LLM messages</th><th>触发时机</th></tr>
+<tr><td>message</td><td>是</td><td>是（user / assistant 文本）</td><td>用户输入、助手回复、终止提示</td></tr>
+<tr><td>function_call</td><td>是</td><td>是（assistant tool_calls）</td><td>模型产出每个工具调用</td></tr>
+<tr><td>function_call_result</td><td>是</td><td>是（tool_result / role=tool）</td><td>每个工具返回（含拒绝文案）</td></tr>
+<tr><td>reasoning</td><td>是</td><td>否</td><td>模型返回 reasoning_content</td></tr>
+<tr><td>file-history-snapshot</td><td>是</td><td>否</td><td>写工具前后各一条</td></tr>
+<tr><td>permission_request / resolved / expired</td><td>是</td><td>否</td><td>ASK 生命周期</td></tr>
+<tr><td>turn_budget_warning</td><td>是</td><td>否</td><td>第 32 轮</td></tr>
+<tr><td>skill_loaded</td><td>是</td><td>否</td><td>自动匹配加载或 use_skill</td></tr>
+<tr><td>run_started / run_finished / run_aborted</td><td>是</td><td>否</td><td>run 边界</td></tr>
+<tr><td>artifact_presented</td><td>是</td><td>否</td><td>present_files 成功且有卡片</td></tr>
+<tr><td>context_usage</td><td>是</td><td>否</td><td>每轮估算 + 官方用量校准各一次</td></tr>
+<tr><td>context_limit_exceeded</td><td>是</td><td>否</td><td>出口②</td></tr>
+<tr><td>final_prompt</td><td>是</td><td>否</td><td>每轮 sanitize 后的真实请求快照</td></tr>
+<tr><td>error</td><td>是</td><td>否</td><td>预留错误通道</td></tr>
+<tr><td>assistant_delta / reasoning_delta</td><td><b>否</b>（sequence=0）</td><td>否</td><td>流式 chunk，仅 SSE</td></tr>
+</table>
+<div class="note">
+回放链路：<code>bootstrap_messages()</code> 只认 message / function_call / function_call_result 三类，
+按「assistant 挂起 → 遇到结果即 flush」重建成对结构；重放时外置指针会被核验，失效的标注 missing。
+</div>
+
+<h2 id="exit">11. 出口清单与终止原因</h2>
+<table>
+<tr><th>#</th><th>出口</th><th>触发条件</th><th>事件</th><th>副作用</th></tr>
+<tr><td>①</td><td>正常结束</td><td>模型不再返回 tool_calls</td><td>run_finished</td><td>保留</td></tr>
+<tr><td>②</td><td>上下文超限</td><td>force_reduce 后仍超窗口</td><td>context_limit_exceeded + run_aborted</td><td>保留，提示开新会话</td></tr>
+<tr><td>③</td><td>轮次用尽</td><td>turn 达到 40</td><td>run_aborted(max_turns)</td><td>保留，<b>不自动回滚</b>（A11）</td></tr>
+<tr><td>④</td><td>用户 abort</td><td>POST /runs/{id}/abort 或删除 session</td><td>run_aborted(user_abort)</td><td>保留，回报已改文件</td></tr>
+<tr><td>⑤</td><td>provider 异常</td><td>网络/鉴权/模型错误</td><td>无（任务 raise）</td><td>保留，日志 exception</td></tr>
+<tr><td>—</td><td>工具被拒</td><td>任意闸门 DENY</td><td>function_call_result</td><td><b>不终止</b>，回传文本让模型换路</td></tr>
+</table>
+
+<h2 id="fail">12. 失败与降级矩阵</h2>
+<table>
+<tr><th>位置</th><th>失败情形</th><th>行为</th><th>是否终止 run</th></tr>
+<tr><td>compact_if_needed</td><td>任意内部异常</td><td>compact_failed 事件，messages 原样</td><td>否</td></tr>
+<tr><td>L4 摘要</td><td>调用失败或空摘要</td><td>summary_failed → 降级纯剪枝（保留 N/2 组）</td><td>否</td></tr>
+<tr><td>硬上限预检</td><td>预检自身异常</td><td>记日志，当作未超限继续</td><td>否</td></tr>
+<tr><td>token 用量估算 / 校准</td><td>异常</td><td>旁路吞掉，不发事件</td><td>否</td></tr>
+<tr><td>final_prompt 落盘</td><td>异常</td><td>旁路吞掉</td><td>否</td></tr>
+<tr><td>provider 调用</td><td>异常</td><td>记录后 raise</td><td><b>是</b>（出口⑤）</td></tr>
+<tr><td>tools.dispatch</td><td>handler 抛异常</td><td>包成 ToolResult(is_error=True)</td><td>否</td></tr>
+<tr><td>_execute_governed 外层</td><td>未捕获异常</td><td>包成「执行异常」ToolResult</td><td>否</td></tr>
+<tr><td>append_change（diff/索引）</td><td>异常</td><td>记日志，不影响工具结果</td><td>否</td></tr>
+<tr><td>present_files 解析</td><td>JSON 解析失败</td><td>cards 置空，不 emit artifact</td><td>否</td></tr>
+<tr><td>bash 执行</td><td>超时 60s（上限 300s）</td><td>kill 整个进程树，返回超时错误</td><td>否</td></tr>
+<tr><td>bash 输出外置化</td><td>写盘失败</td><td>放弃外置，原文继续</td><td>否</td></tr>
+<tr><td>gate 等待</td><td>300s 无响应</td><td>PERMISSION_EXPIRED → 拒绝，<b>不补执行</b></td><td>否</td></tr>
+<tr><td>sub-agent 整体</td><td>任意异常</td><td>返回 status=error 摘要 + 审计</td><td>否</td></tr>
+<tr><td>sub-agent ASK</td><td>需要用户授权</td><td>降级 DENY + 审计</td><td>否</td></tr>
+<tr><td>SQLite 索引</td><td>打不开 / 漂移</td><td>重建或标记 degraded + audit_gap，不自动修</td><td>否</td></tr>
+<tr><td>MCP 自动连接</td><td>连接器失败</td><td>记录日志，不影响启动</td><td>否</td></tr>
+<tr><td>transcript</td><td>尾部半行</td><td>加载时截断到最后一个完整 sequence</td><td>否</td></tr>
+</table>
+
+<h2 id="const">13. 关键常量速查</h2>
+<table>
+<tr><th>常量</th><th>值</th><th>含义</th></tr>
+<tr><td>MAX_TURNS</td><td>40</td><td>主循环上限</td></tr>
+<tr><td>TURN_BUDGET_WARNING</td><td>32</td><td>80% 预算告警</td></tr>
+<tr><td>REPEAT_CALL_LIMIT</td><td>3</td><td>同一 (工具, 参数) 重复即拒绝，per-run 作用域</td></tr>
+<tr><td>FIRST_TURN_REASONING_MIN_LEN / MAX_RETRIES</td><td>20 / 2</td><td>首轮推理守卫</td></tr>
+<tr><td>CONTEXT_WINDOW</td><td>deepseek 64k / anthropic 200k / openai 128k / offline 8k</td><td>按 provider 取窗口</td></tr>
+<tr><td>COMPACT_TRIGGER / TARGET / RESERVE</td><td>0.75 / 0.50 / 4096</td><td>压缩触发、目标、输出预留</td></tr>
+<tr><td>keep_recent_turns</td><td>主 6 / 子代理 4</td><td>摘要保留最近组数</td></tr>
+<tr><td>EXTERNALIZE_THRESHOLD / PREVIEW</td><td>50 KiB / 2 KiB</td><td>输出外置化阈值与预览</td></tr>
+<tr><td>BASH_INLINE_MAX / HEAD / TAIL</td><td>20000 / 14000 / 5000</td><td>bash 输出裁剪</td></tr>
+<tr><td>BASH_TIMEOUT / MAX</td><td>60s / 300s</td><td>服务端控制，不暴露给模型</td></tr>
+<tr><td>gate TIMEOUT</td><td>300s</td><td>权限等待上限</td></tr>
+<tr><td>PERMISSION_TTL_DAYS</td><td>30</td><td>allow_dir 规则有效期</td></tr>
+<tr><td>SUBAGENT_MAX_TURNS / MAX_TIME_S</td><td>10 / 300</td><td>子代理轮次与时间硬上限</td></tr>
+<tr><td>BOOTSTRAP_TTL / HEARTBEAT</td><td>60s / 5s 写入 15s 超时</td><td>sidecar 生命周期</td></tr>
+<tr><td>QUOTA session / global</td><td>200MB 500 文件 / 2GB</td><td>外置化配额，LRU 驱逐</td></tr>
+</table>
+
+<p class="lead" style="margin-top:40px">
+一句话总结：<b>循环的每一处失败都被设计成「降级继续」而不是「崩溃终止」</b>——
+工具异常变结果文本、压缩失败变原样、摘要失败变剪枝、权限超时变拒绝、子代理异常变错误摘要。
+真正会让 run 停下来的只有五件事：模型说完了、上下文彻底超窗、40 轮用尽、用户 abort、provider 抛错。
+</p>
+
+</div>
+</body>
+</html>

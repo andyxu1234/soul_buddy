@@ -109,6 +109,8 @@ SUBAGENT_FORBIDDEN_TOOLS = frozenset({
     # 记忆写入是主会话语义:子代理(探索型)不应替用户产生长期记忆,
     # 且 provenance 应归属主会话。
     "save_user_preference", "write_workspace_fact",
+    # 资料库检索绑定在主会话专家上,子代理 ctx 无 knowledge
+    "search_knowledge",
 })
 
 # 内置 sub-agents(随包分发,开箱即用):soul_buddy/subagents/builtin/
@@ -117,6 +119,22 @@ def _builtin_subagents_dir() -> Path:
     return Path(__file__).parent / "subagents" / "builtin"
 
 BUILTIN_SUBAGENTS_DIR = _builtin_subagents_dir()
+
+# --- Experts(s18:预设角色包,两层:builtin < user) ---------------------------
+EXPERTS_DIR = HOME / "experts"             # user-level: <home>/experts/<id>.json
+
+def _builtin_experts_dir() -> Path:
+    return Path(__file__).parent / "experts" / "builtin"
+
+BUILTIN_EXPERTS_DIR = _builtin_experts_dir()
+
+# --- Knowledge base(资料库/RAG) ----------------------------------------------
+KB_DIR = HOME / "kb"                       # <home>/kb/{kb.db, milvus.db, uploads/<kb_id>/}
+KB_DB_PATH = KB_DIR / "kb.db"             # 元数据(stdlib sqlite3,自包含)
+MILVUS_DB_PATH = KB_DIR / "milvus.db"     # milvus-lite 本地库文件
+KB_UPLOADS_DIR = KB_DIR / "uploads"       # 上传原文:<uploads>/<kb_id>/<doc_id><ext>
+KB_UPLOAD_LIMIT_MB = 30                    # 单文件上传上限
+KB_ALLOWED_EXTS = {".md", ".markdown", ".txt", ".pdf", ".docx"}
 
 # --- File history (WorkBuddy-aligned, three-layer storage) ----------------
 # 内容层: 完整文件快照,文件名 <hash>@<vN>,hash=sha256(绝对路径)[:16]
@@ -139,6 +157,14 @@ class Settings:
     openai_api_key: str = ""
     openai_base_url: str = ""
     openai_chat_model: str = "gpt-4o"
+    # --- Knowledge base(资料库/RAG) embedding 配置(OpenAI 兼容 /embeddings) ---
+    embedding_base_url: str = ""            # 空 = 未配置,资料库检索不可用
+    embedding_api_key: str = ""
+    embedding_model: str = ""
+    embedding_dims: int = 0                 # 0 = 首次调用时从 API 响应探测
+    milvus_uri: str = ""                    # 空 = 本地 milvus-lite 文件;http(s):// = standalone
+    kb_chunk_tokens: int = 700              # 分块目标 token 数
+    kb_top_k: int = 5                       # 检索返回条数
     offline_script: str = ""
 
     @staticmethod
@@ -155,6 +181,13 @@ class Settings:
             openai_api_key=get("OPENAI_API_KEY", ""),
             openai_base_url=get("OPENAI_BASE_URL", ""),
             openai_chat_model=get("OPENAI_CHAT_MODEL", "gpt-4o"),
+            embedding_base_url=get("EMBEDDING_BASE_URL", ""),
+            embedding_api_key=get("EMBEDDING_API_KEY", ""),
+            embedding_model=get("EMBEDDING_MODEL", ""),
+            embedding_dims=int(get("EMBEDDING_DIMS") or 0),
+            milvus_uri=get("MILVUS_URI", ""),
+            kb_chunk_tokens=int(get("KB_CHUNK_TOKENS") or 700),
+            kb_top_k=int(get("KB_TOP_K") or 5),
             offline_script=get("SOUL_OFFLINE_SCRIPT", ""),
         )
 

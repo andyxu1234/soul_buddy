@@ -33,8 +33,16 @@ def _expand_env(value):
     return value
 
 from ..audit import AuditLog
-from ..config import Settings, SKILLS_DIR, MCP_CONFIG_PATH, SUBAGENTS_DIR
+from ..config import (
+    KB_DB_PATH, KB_UPLOADS_DIR, MCP_CONFIG_PATH, Settings, SKILLS_DIR,
+    SUBAGENTS_DIR,
+)
 from ..events import EventBus
+from ..experts import ExpertStore, kb_usage_summary
+from ..knowledge import (
+    IngestWorker, KBStore, KBVectorStore, KnowledgeRetriever,
+    OpenAICompatibleEmbedder,
+)
 from ..memory import MemoryDB, MemoryManager
 from ..memory.pricing import price
 from ..mcp import ConnectorManager, MCPBridge
@@ -89,10 +97,35 @@ class Runtime:
         if self.memory_manager is not None:
             self.memory_manager.refresh_user_projections()
 
+        # --- Experts(s18):builtin + user 两层专家注册表 ---------------------
+        self.experts = ExpertStore()
+
+        # --- Knowledge base(资料库/RAG) --------------------------------------
+        # 任一环节失败都只降级(kb_* = None),不拖垮 sidecar 启动。
+        self.kb_store = None
+        self.kb_vectors = None
+        self.kb_embedder = None
+        self.kb_retriever = None
+        self.kb_ingest = None
+        try:
+            self.kb_store = KBStore(KB_DB_PATH)
+            self.kb_store.ensure_default_kb()
+            self.kb_embedder = OpenAICompatibleEmbedder.from_settings(self.settings)
+            self.kb_vectors = KBVectorStore(self.settings.milvus_uri,
+                                            self.settings.embedding_dims)
+            self.kb_retriever = KnowledgeRetriever(
+                self.kb_store, self.kb_vectors, self.kb_embedder)
+            self.kb_ingest = IngestWorker(
+                self.kb_store, self.kb_vectors, self.kb_embedder,
+                KB_UPLOADS_DIR, chunk_tokens=self.settings.kb_chunk_tokens)
+            self.kb_ingest.start()
+            self.kb_ingest.enqueue_pending()
+        except Exception as exc:
+            self.audit.append("kb_init_failed", {"error": str(exc)})
+
         # --- P5: MCP connectors (untrusted + disconnected by default) -------
         self.mcp = ConnectorManager(self._load_mcp_config())
-        self.mcp_bridge = MCPBridge(self.mcp)
-        # Auto-connect every configured connector so the model can use MCP
+        self.mcp_bridge = MCPBridge(self.mcp)        # Auto-connect every configured connector so the model can use MCP
         # tools without a manual UI toggle — but in the BACKGROUND: an npx
         # stdio connector takes 20-30s to spawn/handshake (observed 22-31s
         # for github), far past Electron's 15s SOULBUDDY_READY budget, so
@@ -305,11 +338,28 @@ class Runtime:
         # Per-session provider override: "auto" or empty falls back to global default.
         session_provider = session.provider if session.provider and session.provider != "auto" else self.settings.provider
         provider = select_provider(self.settings, force_name=session_provider)
+        # 专家绑定(s18):会话 expert_id -> 专家包;禁用的专家不生效。
+        expert = self.experts.get(getattr(session, "expert_id", None))
+        if expert is not None and not expert.enabled:
+            expert = None
+        # 资料库绑定:专家 kb_ids 里仍然存在的库 -> 检索链路(依赖 embedding 配置)。
+        kb_summary = None
+        knowledge = None
+        kb_ids: list[str] = []
+        if expert is not None and expert.kb_ids and self.kb_store is not None:
+            kb_ids = [k for k in expert.kb_ids if self.kb_store.get_kb(k)]
+            kb_names = [self.kb_store.get_kb(k)["name"] for k in kb_ids]
+            if kb_ids and self.kb_retriever is not None \
+                    and self.kb_retriever.available():
+                knowledge = self.kb_retriever
+                kb_summary = kb_usage_summary(kb_names)
         return SoulAgent(self.storage, self.registry, self.events, self.audit,
                          provider, policy, context=context,
                          memory=self.memory_manager, skills=skills,
                          stream=True, subagents=subagents,
-                         subagent_runner_factory=runner_factory)
+                         subagent_runner_factory=runner_factory,
+                         expert=expert, kb_summary=kb_summary,
+                         knowledge=knowledge, kb_ids=kb_ids)
 
     # --- bootstrap (A09 / B11) ---------------------------------------------
     def consume_bootstrap(self, token: str) -> bool:

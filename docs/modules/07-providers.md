@@ -2,7 +2,8 @@
 
 > 代码包：`soul_buddy/providers/`
 > 功能模块：M1 Provider 适配层 ｜ 阶段：P0 / P1 ｜ 风险：中
-> **状态：🔴 未实现（仅文档规划）**
+> **状态：🟢 已实现（P0–P5 全部交付，2026-09）** —— 本文档保留设计期规划与约束（§3 仍然有效）；
+> 文中行数为当时估算，「§4 实现要点 / TODO」为规划清单，现状一律以代码与下列深度文档为准。
 
 ## 1. 职责定位
 四家 LLM 形状归一化：Provider / ToolSpec / ToolCall / ModelTurn / ProviderRequest。让 agent 层与具体厂商解耦，支持可切换。

@@ -5,15 +5,22 @@
 
 ## 当前状态
 
-🔴 **全部模块均未实现。** 截至 2026-09-08，仓库仅有 `docs/`（本目录）与 `.venv`（第三方依赖），
-没有任何 `soul_buddy/` 后端或 `desktop/` 前端源码。因此每份模块文档目前都是
-**「规划骨架 + 设计约束 + TODO」**，状态统一标注为「未实现」。
+🟢 **全部模块已实现。** P0–P5 已全部交付（2026-09），后端 9,227 行 Python + 桌面端 5,557 行 TS/TSX，
+测试 20 个文件 / 162 个用例。每份模块文档保留**设计期规划与约束**（「§3 设计决策与约束」仍然有效），
+但行数与 TODO 为当时估算，**现状一律以代码为准**。
 
-实现顺序见 `docs/implementation-plan.md` §6（P0→P1→★P1.5→P2→★P4→P3→P5）。
-当某模块开始编码，请在该文档：
-1. 把顶部状态改为 `🟡 实现中` 或 `🟢 已实现`；
-2. 在「§3 设计决策与约束」补实现细节（函数签名、关键算法、踩坑）；
-3. 在「§4 实现要点 / TODO」勾选并补充新条目。
+实现顺序见 `docs/implementation-plan.md` §6（P0→P1→★P1.5→P2→★P4→P3→P5，全部完成）。
+
+跨模块的深度梳理（推荐配合阅读）：
+
+| 深度文档 | 覆盖内容 |
+|---|---|
+| [Agent 循环全景图](../agent-loop-map.md) | 主循环每个分支、权限/子代理/压缩子流程、13 张图 |
+| [项目全景思维导图](../architecture-mindmap.md) | 全景导图、目录树、分层架构、模块依赖、阅读路线 |
+| [数据与存储架构](../data-and-storage.md) | 全部持久化资产、事件生命周期、审计链、文件历史 |
+| [RAG 管线全景](../rag-pipeline.md) | 资料库索引/查询两条管线、状态机、Milvus schema、降级路径 |
+| [桌面端架构与生命周期](../desktop-architecture.md) | 进程模型、启动/关闭时序、看门狗、安全边界 |
+| [Skills 与 MCP 系统](../skills-and-mcp.md) | 技能生命周期、D1 窄化、连接器信任模型 |
 
 ## 模块清单
 
@@ -32,8 +39,10 @@
 | [11-memory.md](./11-memory.md) | `memory/` | M8 | P3 | 低 | 4 |
 | [12-api.md](./12-api.md) | `api/` | M9 | P0/P1/P5 | 高 | 9 |
 | [13-desktop.md](./13-desktop.md) | `desktop/` | M10/M11/M12 | P4/P5 | 中/高/高 | 9 |
+| [14-knowledge.md](./14-knowledge.md) | `knowledge/` | M13 资料库/RAG | P6 | 中 | 7 |
+| [15-experts.md](./15-experts.md) | `experts/` | M14 专家系统 | P6 | 低 | 4 |
 
-> 注：`api/` 含 `runtime.py`+`main.py`+7 个 router，故核心文件计 9。
+> 注：`api/` 含 `runtime.py`+`main.py`+9 个 router；`knowledge/` 7 文件；`experts/` 3 文件 + 5 内置预设。
 
 ## 按阶段归集
 
