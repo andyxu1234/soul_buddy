@@ -36,6 +36,8 @@
 | [08-permissions.md](./08-permissions.md) | `permissions/` | M4 | P1 | 高 | 6 |
 | [09-tools.md](./09-tools.md) | `tools/` | M3 | P1 | 高 | 4 |
 | [10-context.md](./10-context.md) | `context/` | M7 | P2 | 中 | 4 |
+| [16-compact.md](./16-compact.md) | `context/compact.py` | M7（专题） | P0/P1 加固 | 中 | 1 |
+| [17-human-in-the-loop.md](./17-human-in-the-loop.md) | `permissions/` + `agent.py` + `api/` + `renderer/` | M4（专题） | P1/P4 | 高 | 14 |
 | [11-memory.md](./11-memory.md) | `memory/` | M8 | P3 | 低 | 4 |
 | [12-api.md](./12-api.md) | `api/` | M9 | P0/P1/P5 | 高 | 9 |
 | [13-desktop.md](./13-desktop.md) | `desktop/` | M10/M11/M12 | P4/P5 | 中/高/高 | 9 |
@@ -43,6 +45,7 @@
 | [15-experts.md](./15-experts.md) | `experts/` | M14 专家系统 | P6 | 低 | 4 |
 
 > 注：`api/` 含 `runtime.py`+`main.py`+9 个 router；`knowledge/` 7 文件；`experts/` 3 文件 + 5 内置预设。
+> `16-compact` / `17-human-in-the-loop` 为**跨模块专题**，不新增独立代码包，横向覆盖已有模块。
 
 ## 按阶段归集
 

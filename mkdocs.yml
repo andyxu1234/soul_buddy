@@ -52,6 +52,7 @@ nav:
       - Subagent 架构: subagents-architecture.md
       - 模块索引: modules/INDEX.md
       - 与 learn-workbuddy 对照: learn-workbuddy-mapping.md
+      - Deep Agents 差距分析: deepagents-gap-analysis.md
   - 模块详解:
       - 01 配置与全局常量: modules/01-config.md
       - 02 数据模型: modules/02-models.md
@@ -63,6 +64,8 @@ nav:
       - 08 权限治理层: modules/08-permissions.md
       - 09 工具执行层: modules/09-tools.md
       - 10 上下文管理: modules/10-context.md
+      - 16 上下文压缩（Compact）: modules/16-compact.md
+      - 17 Human-in-the-Loop（人工介入）: modules/17-human-in-the-loop.md
       - 11 记忆层: modules/11-memory.md
       - 12 API 与实时通道: modules/12-api.md
       - 13 桌面壳 / 打包 / 安装: modules/13-desktop.md
