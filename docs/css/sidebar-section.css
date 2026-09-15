@@ -17,3 +17,76 @@
 .md-nav__item--section > .md-nav__link:hover {
   color: var(--md-typeset-a-color);
 }
+
+/* ------------------------------------------------------------------
+   固定侧边栏：侧栏钉在视口内，只有它自己滚动，正文独立滚动。
+   ------------------------------------------------------------------ */
+@media screen and (min-width: 76.25em) {
+  .md-sidebar--primary {
+    /* 占满除 header 外的可视高度，并吸附 */
+    position: sticky;
+    top: 2.4rem;               /* = header 高度 */
+    height: calc(100vh - 2.4rem);
+    /* 侧栏内部滚动，避免整页滚动时导航跟着跑掉 */
+    overflow-y: auto;
+    overflow-x: hidden;
+    /* 滚动时贴边不产生跳动 */
+    overscroll-behavior: contain;
+    /* 细滚动条，避免挤压导航文字 */
+    scrollbar-width: thin;
+    scrollbar-color: var(--md-default-fg-color--lighter) transparent;
+  }
+
+  .md-sidebar--primary::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .md-sidebar--primary::-webkit-scrollbar-thumb {
+    background-color: var(--md-default-fg-color--lighter);
+    border-radius: 4px;
+  }
+
+  .md-sidebar--primary::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* 导航本身不再自带滚动，交给上面的容器统一处理 */
+  .md-sidebar--primary .md-sidebar__scrollwrap {
+    position: static;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    margin: 0;
+    touch-action: auto;
+  }
+
+  /* 展开后导航很长：让每个分组的子项也有清晰的左侧缩进 */
+  .md-nav__item--section > .md-nav {
+    margin-left: 0.4rem;
+    border-left: 1px solid var(--md-default-fg-color--lightest);
+    padding-left: 0.2rem;
+  }
+}
+
+/* ------------------------------------------------------------------
+   强制展开兜底：任何仍然带折叠开关的导航分组一律常驻展开，
+   并把折叠箭头隐藏掉（避免点击后收起、造成"进入子目录"的错觉）。
+   ------------------------------------------------------------------ */
+.md-nav__item--nested > .md-nav__toggle ~ .md-nav,
+.md-nav__item--nested > input.md-nav__toggle:checked ~ .md-nav {
+  display: block !important;
+  opacity: 1 !important;
+  height: auto !important;
+}
+
+/* 隐藏折叠箭头，只留可点击的文字链接 */
+.md-nav__item--nested > .md-nav__link .md-nav__icon,
+.md-nav__item--section > .md-nav__link .md-nav__icon {
+  display: none;
+}
+
+/* 既然是常驻展开，label 不应再表现为「可展开控件」 */
+.md-nav__item--nested > .md-nav__link,
+.md-nav__item--section > .md-nav__link {
+  cursor: default;
+}

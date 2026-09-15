@@ -38,14 +38,17 @@
 | [10-context.md](./10-context.md) | `context/` | M7 | P2 | 中 | 4 |
 | [16-compact.md](./16-compact.md) | `context/compact.py` | M7（专题） | P0/P1 加固 | 中 | 1 |
 | [17-human-in-the-loop.md](./17-human-in-the-loop.md) | `permissions/` + `agent.py` + `api/` + `renderer/` | M4（专题） | P1/P4 | 高 | 14 |
+| [18-skills.md](./18-skills.md) | `skills/` | M3（专题） | P5 | 中 | 4 |
 | [11-memory.md](./11-memory.md) | `memory/` | M8 | P3 | 低 | 4 |
 | [12-api.md](./12-api.md) | `api/` | M9 | P0/P1/P5 | 高 | 9 |
 | [13-desktop.md](./13-desktop.md) | `desktop/` | M10/M11/M12 | P4/P5 | 中/高/高 | 9 |
 | [14-knowledge.md](./14-knowledge.md) | `knowledge/` | M13 资料库/RAG | P6 | 中 | 7 |
 | [15-experts.md](./15-experts.md) | `experts/` | M14 专家系统 | P6 | 低 | 4 |
+| [19-mcp.md](./19-mcp.md) | `mcp/` | M15 MCP 连接器 | P5 | 中 | 4 |
 
 > 注：`api/` 含 `runtime.py`+`main.py`+9 个 router；`knowledge/` 7 文件；`experts/` 3 文件 + 5 内置预设。
-> `16-compact` / `17-human-in-the-loop` 为**跨模块专题**，不新增独立代码包，横向覆盖已有模块。
+> `16-compact` / `17-human-in-the-loop` / `18-skills` 为**跨模块专题**，不新增独立代码包，横向覆盖已有模块。
+> `19-mcp` 对应 `mcp/` 包（4 文件）+ `api/routers/mcp.py` + prompt 注入，P5 交付。
 
 ## 按阶段归集
 
@@ -55,7 +58,7 @@
 - **P2（上下文层）**：10-context
 - **★ P4（桌面壳，前置到记忆层前）**：13-desktop
 - **P3（记忆 + SQLite）**：11-memory
-- **P5（skills/MCP + 正式打包 + 安装生命周期）**：12-api（acp/maintenance/shutdown） · 13-desktop（打包 M11 / 安装 M12）
+- **P5（skills/MCP + 正式打包 + 安装生命周期）**：12-api（acp/maintenance/shutdown） · 13-desktop（打包 M11 / 安装 M12） · 18-skills · 19-mcp
 
 ## 风险最高（高优先级）模块
 
