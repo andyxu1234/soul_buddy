@@ -5,9 +5,12 @@ provider), so responses map back 1:1.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from .base import ModelTurn, Provider, ProviderRequest, ToolCall, ToolSpec
+
+log = logging.getLogger("soul_buddy.provider")
 
 
 def _block_to_dict(block: Any) -> dict:
@@ -36,7 +39,24 @@ class AnthropicProvider(Provider):
     def __init__(self, api_key: str, model: str, base_url: str = "") -> None:
         from anthropic import Anthropic
         self.model = model
-        self._client = Anthropic(api_key=api_key, base_url=base_url or None)
+        client = Anthropic(api_key=api_key, base_url=base_url or None)
+        # LangSmith: wrap_anthropic() patches the client so every
+        # messages.create / messages.stream call is auto-traced.
+        # Tracing only emits when LANGSMITH_TRACING=true is set.
+        try:
+            from langsmith.wrappers import wrap_anthropic
+            # wrap_anthropic patches messages.create/stream first, then
+            # tries the legacy completions endpoint which newer anthropic
+            # SDKs (>=1.0) removed. Catch AttributeError so the messages
+            # patching (already applied) survives.
+            try:
+                client = wrap_anthropic(client)
+            except AttributeError:
+                log.info("wrap_anthropic: legacy completions endpoint "
+                         "absent (anthropic SDK >= 1.0); messages tracing active")
+        except ImportError:
+            log.warning("langsmith not installed; Anthropic calls will not be traced")
+        self._client = client
 
     def tool_schemas(self, tools: list[ToolSpec]) -> list[dict]:
         return _to_anthropic_tools(tools)

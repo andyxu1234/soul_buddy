@@ -48,7 +48,17 @@ class OpenAIChatProvider(Provider):
     def __init__(self, api_key: str, model: str, base_url: str = "") -> None:
         from openai import OpenAI
         self.model = model
-        self._client = OpenAI(api_key=api_key, base_url=base_url or None)
+        client = OpenAI(api_key=api_key, base_url=base_url or None)
+        # LangSmith: wrap_openai() patches the client so every
+        # chat.completions.create call (incl. streaming) is auto-traced.
+        # Tracing only emits when LANGSMITH_TRACING=true is set; otherwise
+        # the wrapper is a no-op pass-through.
+        try:
+            from langsmith.wrappers import wrap_openai
+            client = wrap_openai(client)
+        except ImportError:
+            log.warning("langsmith not installed; OpenAI calls will not be traced")
+        self._client = client
 
     def tool_schemas(self, tools: list[ToolSpec]) -> list[dict]:
         return _to_openai_tools(tools)

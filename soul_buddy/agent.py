@@ -21,6 +21,17 @@ import anyio
 
 log = logging.getLogger("soul_buddy.agent")
 
+# LangSmith @traceable: creates a top-level trace for each agent run.
+# All LLM calls inside (auto-traced by wrap_openai / wrap_anthropic)
+# become child runs, forming a complete nested trace tree per invocation.
+# Tracing only emits when LANGSMITH_TRACING=true; otherwise no-op.
+try:
+    from langsmith import traceable as _ls_traceable
+except ImportError:  # pragma: no cover - langsmith is an optional dep at runtime
+    def _ls_traceable(*_a, **_kw):
+        def _wrap(fn): return fn
+        return _wrap
+
 from .config import (
     FIRST_TURN_REASONING_MAX_RETRIES, FIRST_TURN_REASONING_MIN_LEN,
     MAX_TURNS, REPEAT_CALL_LIMIT, TURN_BUDGET_WARNING,
@@ -88,6 +99,7 @@ class SoulAgent:
         await self.events.publish(session.id, ev)
 
     # --- main entry ---------------------------------------------------------
+    @_ls_traceable(name="SoulAgent.run", run_type="chain")
     async def run(self, session: SessionRecord, text: str,
                  approver) -> RunResult:
         self._call_counter.clear()

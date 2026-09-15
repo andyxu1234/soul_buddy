@@ -21,6 +21,7 @@ dependencies = [
     "python-docx",
     "pymilvus",
     "milvus-lite",
+    "langsmith",
 ]
 
 [project.optional-dependencies]
