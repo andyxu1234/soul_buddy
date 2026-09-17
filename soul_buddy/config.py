@@ -10,6 +10,79 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+
+# --- .env bootstrap ----------------------------------------------------------
+# MUST run before any constant below is evaluated.
+#
+# api/main.py also calls load_dotenv(), but only *after* it imports the routers
+# — and those import this module. The constants below are evaluated at import
+# time, so a load that happens later silently misses them. Loading here makes
+# .env authoritative for everything this file defines.
+def _load_env_files() -> None:
+    """Load .env from the usual locations; real env vars always win.
+
+    ``SOUL_SKIP_DOTENV=1`` disables the whole lookup — the test suite sets it
+    so results never depend on the developer's local .env.
+    """
+    if os.environ.get("SOUL_SKIP_DOTENV"):
+        return
+    try:
+        from dotenv import load_dotenv
+    except ImportError:  # dotenv is optional at import time
+        return
+
+    candidates: list[Path] = []
+    explicit = os.environ.get("SOUL_ENV_FILE")
+    if explicit:
+        candidates.append(Path(explicit).expanduser())
+    # User-level: <home>/.env — the practical spot for a packaged app, since
+    # the repo checkout is not shipped.
+    raw_home = os.environ.get("SOUL_BUDDY_HOME")
+    home = Path(raw_home).expanduser() if raw_home else Path.home() / ".soul_buddy"
+    candidates.append(home / ".env")
+    # Source checkout: <repo>/.env
+    candidates.append(Path(__file__).resolve().parent.parent / ".env")
+    # Whatever directory the process happened to start from.
+    candidates.append(Path.cwd() / ".env")
+
+    seen: set[str] = set()
+    for path in candidates:
+        try:
+            key = str(path.resolve())
+        except OSError:
+            continue
+        if key in seen or not path.is_file():
+            continue
+        seen.add(key)
+        # override=False: an explicit environment variable beats .env. This
+        # also keeps pytest's pinned values authoritative over the file.
+        load_dotenv(path, override=False)
+
+
+def _env_str(name: str, default: str) -> str:
+    raw = os.environ.get(name)
+    return raw.strip() if raw and raw.strip() else default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return int(raw.strip())
+    except ValueError:
+        return default
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+_load_env_files()
+
 # --- Agent loop limits -------------------------------------------------------
 MAX_TURNS = 40                      # BR-01
 TURN_BUDGET_WARNING = 32            # BR-01: 80% -> emit turn_budget_warning
@@ -53,6 +126,22 @@ BASH_TIMEOUT_MAX = 300              # hard cap, server-side only (B16: not in sc
 # --- Permissions (A05 / A26) ------------------------------------------------
 PERMISSION_TTL_DAYS = 30
 
+# --- Runtime rubric self-verification (P6 / M16) ----------------------------
+# See docs/rubric-design.md and docs/modules/20-rubric.md.
+# All seven knobs are settable from the environment or from .env (.env.example
+# lists them). An explicit environment variable always beats the file.
+#   off      - never enters the verification stage (default: byte-identical to
+#              the pre-rubric behaviour, see INV-21)
+#   advisory - scores + persists + emits, but never retries (calibration mode)
+#   enforce  - scores and retries the model when the report does not pass
+RUBRIC_MODE = _env_str("SOUL_RUBRIC_MODE", "off").lower()
+RUBRIC_PASS_THRESHOLD = _env_int("SOUL_RUBRIC_PASS_THRESHOLD", 70)       # 0-100
+RUBRIC_MAX_RETRIES = _env_int("SOUL_RUBRIC_MAX_RETRIES", 1)              # INV-17
+RUBRIC_MIN_TURNS_LEFT = _env_int("SOUL_RUBRIC_MIN_TURNS_LEFT", 3)
+RUBRIC_LLM_JUDGE = _env_bool("SOUL_RUBRIC_LLM_JUDGE", True)             # Q5/Q6
+RUBRIC_JUDGE_DIFF_MAX_CHARS = _env_int("SOUL_RUBRIC_JUDGE_DIFF_MAX_CHARS", 8000)
+RUBRIC_DEGRADE_ON_NO_PROVIDER = _env_bool("SOUL_RUBRIC_DEGRADE_ON_NO_PROVIDER", True)
+
 # --- Sidecar lifecycle (A18 / B11 / B12) -----------------------------------
 BOOTSTRAP_TTL = 60                  # seconds, counted from SOULBUDDY_READY (B11)
 HEARTBEAT_INTERVAL = 5              # seconds (Electron writes runtime.json heartbeat)
@@ -90,7 +179,22 @@ SIDECAR_LOG = LOG_DIR / "sidecar.log"       # 主日志（轮转）
 # --- Logging ---
 # 按天滚动：当天日志写入 sidecar.log，午夜滚动后历史日志命名为 sidecar.log.YYYY-MM-DD
 LOG_BACKUP_DAYS = 14                        # 保留最近 14 天的历史日志
-LOG_LEVEL = os.environ.get("SOUL_LOG_LEVEL", "INFO")
+LOG_LEVEL = _env_str("SOUL_LOG_LEVEL", "INFO")
+
+# --- LangSmith tracing (observability) --------------------------------------
+# Tracing is driven by the langsmith SDK's own env vars; these constants exist
+# so the sidecar can report the *effective* configuration to the UI without the
+# frontend ever seeing the API key. `LANGSMITH_TRACING` gates everything: with
+# it false the wrap_openai / wrap_anthropic shims are pass-through no-ops.
+LANGSMITH_TRACING = _env_bool("LANGSMITH_TRACING", False)
+LANGSMITH_PROJECT = _env_str("LANGSMITH_PROJECT", "soul-buddy")
+LANGSMITH_ENDPOINT = _env_str("LANGSMITH_ENDPOINT",
+                              "https://api.smith.langchain.com")
+# The API key itself is never returned to the client — only whether it is set.
+LANGSMITH_API_KEY_SET = bool((os.environ.get("LANGSMITH_API_KEY") or "").strip())
+# Console URL for a project's trace list (workspace-agnostic default).
+LANGSMITH_BASE_URL = _env_str("LANGSMITH_BASE_URL", "https://smith.langchain.com")
+
 
 # --- P5: skills + MCP ------------------------------------------------------
 SKILLS_DIR = HOME / "skills"                # user-level skills: <home>/skills/<n>/SKILL.md

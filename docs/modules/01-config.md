@@ -49,6 +49,40 @@
 |---|---|---|
 | `SOUL_BUDDY_HOME` | `~/.soul_buddy` | 状态目录根（`_resolve_home()`，自动创建） |
 | `SOUL_LOG_LEVEL` | `INFO` | 日志级别 |
+| `SOUL_ENV_FILE` | 空 | 显式指定 `.env` 路径，优先级最高（见 §3.4） |
+| `SOUL_SKIP_DOTENV` | 空 | 设任意非空值则**完全跳过** `.env` 加载；测试套件用它隔离本机 `.env`（见 §3.4） |
+| `SOUL_RUBRIC_MODE` | `off` | 运行时 rubric 自评闭环（M16）：`off` / `advisory` / `enforce`。**非 `Settings` 字段**，是模块级常量 `RUBRIC_MODE`，但同样可以写进 `.env`（§3.4）。非法值由 `RubricPolicy.from_config()` 兜底为 `off`。另有 6 个 `SOUL_RUBRIC_*`（阈值 / 重修上限 / judge 开关等），见 [20-rubric.md](./20-rubric.md) §10 |
+
+### 3.4 `.env` 的加载与优先级
+
+`config.py` **在文件顶部**（任何常量求值之前）调用 `_load_env_files()`。
+这一步不能省：`api/main.py` 也有一个 `load_dotenv()`，但它在 import 完 routers 之后才执行，
+而 routers → runtime → `config`，**本文件的模块级常量在 import 那一刻就求值完了** ——
+放在 main 里对它们等于无效。
+
+查找顺序（先命中先加载，后续不覆盖；`dotenv` 缺失时静默跳过）：
+
+| 顺序 | 路径 | 场景 |
+|---|---|---|
+| 1 | `$SOUL_ENV_FILE` | 显式指定 |
+| 2 | `<home>/.env` | 打包版（默认 `~/.soul_buddy/.env`；仓库 checkout 不随包分发） |
+| 3 | `<repo>/.env` | 源码运行，由 `config.py` 上溯两级定位，与 cwd 无关 |
+| 4 | `<cwd>/.env` | 兜底 |
+
+**优先级：显式环境变量 > `.env` > 代码默认值。** `load_dotenv(override=False)` 保证
+已存在于 `os.environ` 的变量不被文件覆盖 —— 这也是 `tests/conftest.py` 能把
+`SOUL_BUDDY_HOME` / `SOUL_RUBRIC_MODE` 钉死、不受本机 `.env` 影响的原因。
+
+> 改 `.env` 后需**重启 sidecar / App**：模块级常量在 import 时求值，运行中改不生效。
+> `Settings`（provider key / embedding / KB 等）走 `Settings.load()`，是运行时读取，
+> 但同样建议重启，避免新旧配置混用。
+
+> ⚠️ **第三方库也可能加载 `.env`。** 有些依赖会在 import 时自行调用 `load_dotenv()`，
+> 这种加载 `SOUL_SKIP_DOTENV` 拦不住（那不是本项目的加载点）。
+> `tests/conftest.py` 因此对 `MILVUS_URI` / `EMBEDDING_*` / `SOUL_PROVIDER` 直接写死空值 ——
+> 靠的正是「已存在的环境变量不被覆盖」这条：**无论谁去读 `.env`，测试拿到的都是干净配置**。
+> 这也是 `api/main.py` 里原本那个 `load_dotenv()` 被删掉的原因（它既太晚，
+> 又绕过了 `SOUL_SKIP_DOTENV`）。
 
 ## 4. 目录布局（`HOME = SOUL_BUDDY_HOME`，默认 `~/.soul_buddy`）
 | 常量 | 路径 | 用途 |

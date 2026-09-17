@@ -47,6 +47,7 @@ from .permissions import (
 from .prompts import get_system_prompt
 from .providers.base import ModelTurn, Provider, ProviderRequest, ToolCall, sanitize_tool_messages
 from .skills.registry import authorize_skill_tool
+from . import rubric as _rubric
 
 
 class SoulAgent:
@@ -55,7 +56,8 @@ class SoulAgent:
                  skills=None, stream: bool = False,
                  subagents=None, subagent_runner_factory=None,
                  expert=None, kb_summary: str | None = None,
-                 knowledge=None, kb_ids: list[str] | None = None) -> None:
+                 knowledge=None, kb_ids: list[str] | None = None,
+                 rubric=None) -> None:
         self.storage = storage
         self.tools = tools
         self.events = events
@@ -72,6 +74,11 @@ class SoulAgent:
         self.kb_summary = kb_summary      # 专家绑定资料库的说明(kb_ids 非空才有)
         self.knowledge = knowledge        # KnowledgeRetriever (None = 检索不可用)
         self.kb_ids = kb_ids or []        # 会话可检索的资料库 id 列表
+        # P6: runtime rubric self-verification. Defaults to the config-derived
+        # policy, whose mode defaults to "off" — so wiring this in changes
+        # nothing until someone opts in (INV-21).
+        self.rubric = (rubric if rubric is not None
+                       else _rubric.RubricPolicy.from_config())
         self._call_counter: Counter[tuple[str, str]] = Counter()
         # Exposed so an abort can report partial progress (BR: no silent loss).
         self.modified_files: list[str] = []
@@ -110,6 +117,7 @@ class SoulAgent:
         if callable(reset):
             reset()
         self.turns_used = 0
+        self.rubric.reset_run()            # P6: retry budget is per-run (INV-16)
         log.info("run start session=%s provider=%s prompt_len=%d",
                  session.id, self.provider.name, len(text))
 
@@ -310,10 +318,15 @@ class SoulAgent:
                 })
 
             # assistant message: 只含文本,工具调用单独 emit function_call
-            await self._aemit(session, EventType.MESSAGE, {
-                "role": "assistant",
-                "text": emit_text,
-            })
+            # P6: 当 rubric 开启且本轮是收尾轮时,这段文本还只是"草稿" ——
+            # 验收通过之前不能 emit,否则用户会先看到"我做完了",紧接着又看到
+            # agent 继续干活。off 模式下 hold_draft 恒为 False(INV-21)。
+            hold_draft = (not model_turn.wants_tools) and self.rubric.enabled
+            if not hold_draft:
+                await self._aemit(session, EventType.MESSAGE, {
+                    "role": "assistant",
+                    "text": emit_text,
+                })
             # 逐个 emit 工具调用,与 LLM 的 tool_use block 一一对应
             for call in model_turn.tool_calls:
                 await self._aemit(session, EventType.FUNCTION_CALL, {
@@ -323,10 +336,55 @@ class SoulAgent:
                 })
 
             if not model_turn.wants_tools:
-                await self._aemit(session, EventType.RUN_FINISHED,
-                                  {"turns": turn, "truncated": False})
-                return RunResult(text=model_turn.text, turns=turn,
-                                 modified_files=modified_files)
+                # P6 verification stage. With the rubric off this is the exact
+                # original path — same events, same result shape (INV-21).
+                if not self.rubric.enabled:
+                    await self._aemit(session, EventType.RUN_FINISHED,
+                                      {"turns": turn, "truncated": False})
+                    return RunResult(text=model_turn.text, turns=turn,
+                                     modified_files=modified_files)
+
+                report = await self._verify_rubric(
+                    session, request_id=request_id, text=model_turn.text,
+                    turn=turn, modified_files=modified_files)
+
+                if report.safety_violation:
+                    # INV-19: never retry a safety violation — retrying means
+                    # inviting the model to attempt the dangerous action again.
+                    await self._aemit(session, EventType.RUBRIC_SAFETY_VIOLATION,
+                                      report.to_dict())
+                    return await self._deliver(session, model_turn.text, turn,
+                                               report, modified_files)
+
+                retrying = (self.rubric.enforcing and not report.passed
+                            and self.rubric.can_retry(turn))
+                if not retrying:
+                    await self._aemit(
+                        session,
+                        EventType.RUBRIC_PASSED if report.passed
+                        else EventType.RUBRIC_FAILED,
+                        report.to_dict())
+                    return await self._deliver(session, model_turn.text, turn,
+                                               report, modified_files)
+
+                # Not good enough. The draft is held back — it never reaches
+                # the user as a final answer — and the feedback goes back to the
+                # model. raw_assistant must still be appended: dropping a valid
+                # terminating assistant turn would break tool_use/tool_result
+                # pairing and role alternation (C-02 / INV-18).
+                messages.append(model_turn.raw_assistant)
+                messages.append({"role": "user",
+                                 "content": _rubric.render_feedback(report)})
+                self.rubric.note_retry()
+                await self._aemit(session, EventType.RUBRIC_RETRY, {
+                    "retry": self.rubric.retries_used,
+                    "failed": report.failed_gating,
+                    "total": report.total,
+                })
+                log.info("rubric retry %d/%d total=%d failed=%s",
+                         self.rubric.retries_used, self.rubric.max_retries,
+                         report.total, report.failed_gating or "-")
+                continue
 
             for call in model_turn.tool_calls:
                 is_write = call.name in WRITE_TOOLS
@@ -432,6 +490,92 @@ class SoulAgent:
                          truncated=True, reason="max_turns",
                          modified_files=modified_files)
 
+    # --- P6: rubric verification stage --------------------------------------
+    async def _verify_rubric(self, session: SessionRecord, *, request_id: str,
+                             text: str, turn: int,
+                             modified_files: list[str]):
+        """Score this run against the rubric, persist and emit the report."""
+        try:
+            events = self.storage.read_transcript(session.id)
+            run_events = _rubric.slice_run(events, request_id)
+            sig = _rubric.from_events(
+                run_events, final_text=text, turns_used=turn,
+                max_turns=MAX_TURNS,
+                modified_files=list(modified_files),
+                diff_text=self._collect_diff(session, request_id))
+            report = await _rubric.evaluate(
+                sig, provider=self.provider, policy=self.rubric)
+        except Exception:
+            # INV-20: verification must never take the run down — and a failure
+            # here must not punish the model, so the run is treated as passed.
+            log.exception("rubric evaluation failed (non-fatal, treated as pass)")
+            report = _rubric.aggregate([], [], policy=self.rubric,
+                                       detail="rubric 评估异常，已跳过")
+            report.passed = True
+
+        self._persist_report(session, request_id, report)
+        await self._aemit(session, EventType.RUBRIC_EVALUATED, report.to_dict())
+        log.info(report.summary_line())
+        return report
+
+    async def _deliver(self, session: SessionRecord, text: str, turn: int,
+                       report, modified_files: list[str]) -> RunResult:
+        """Emit the accepted answer (the draft that was held back) and finish."""
+        await self._aemit(session, EventType.MESSAGE,
+                          {"role": "assistant", "text": text})
+        await self._aemit(session, EventType.RUN_FINISHED, {
+            "turns": turn, "truncated": False,
+            "rubric_passed": report.passed,
+        })
+        return RunResult(text=text, turns=turn,
+                         modified_files=list(modified_files),
+                         rubric=report.to_dict())
+
+    def _persist_report(self, session: SessionRecord, request_id: str,
+                        report) -> None:
+        """Drop the report beside the session so it can be aggregated offline."""
+        try:
+            sdir = self.storage._session_dir(session.id, session.workspace_root)
+            out = sdir / "rubric"
+            out.mkdir(parents=True, exist_ok=True)
+            (out / f"{request_id}.json").write_text(
+                json.dumps(report.to_dict(), ensure_ascii=False, indent=2),
+                encoding="utf-8")
+        except Exception:
+            log.exception("persist rubric report failed (non-fatal)")
+
+    def _collect_diff(self, session: SessionRecord, request_id: str) -> str:
+        """Concatenate this run's diffs for the LLM judge.
+
+        Only the hunks matter — the judge needs to see *what changed*, not the
+        whole transcript.
+        """
+        fh = getattr(self.storage, "file_history", None)
+        if fh is None:
+            return ""
+        try:
+            idx = fh.read_changes_index(session.id)
+        except Exception:
+            log.exception("read_changes_index failed (non-fatal)")
+            return ""
+
+        chunks: list[str] = []
+        for entry in idx.get("changes", []):
+            if entry.get("requestId") != request_id:
+                continue
+            detail = fh.read_change_detail(
+                session.id, request_id, entry.get("revision", 1))
+            if not detail:
+                continue
+            for fc in (detail.get("change") or {}).get("files", []):
+                chunks.append(f"--- {fc.get('filePath', '')} "
+                              f"({fc.get('action', '')})")
+                for hunk in fc.get("hunks", []):
+                    chunks.append(f"@@ -{hunk.get('oldStart')} "
+                                  f"+{hunk.get('newStart')} @@")
+                    chunks.extend(hunk.get("lines", []))
+        return "\n".join(chunks)
+
     # --- governed execution -------------------------------------------------
     async def _execute_governed(self, call: ToolCall, session: SessionRecord,
                                 approver) -> ToolResult:
@@ -439,6 +583,11 @@ class SoulAgent:
         key = (call.name, hashlib.md5(
             json.dumps(call.arguments, sort_keys=True).encode()).hexdigest())
         if self._call_counter[key] >= REPEAT_CALL_LIMIT:
+            await self._aemit(session, EventType.PERMISSION_DENIED, {
+                "call_id": call.id, "tool": call.name,
+                "args": call.arguments, "source": "repeat",
+                "reason": f"同一调用重复 {self._call_counter[key]} 次",
+            })
             return ToolResult(
                 content="已拒绝：该调用重复执行多次，请换一种方式。")
         self._call_counter[key] += 1
@@ -450,6 +599,13 @@ class SoulAgent:
         decision = self.permissions.decide(req)
 
         if decision.action == PermissionAction.DENY:
+            # Leave a trace: without this the transcript cannot answer "was a
+            # dangerous operation refused during this run?".
+            await self._aemit(session, EventType.PERMISSION_DENIED, {
+                "call_id": call.id, "tool": call.name,
+                "args": call.arguments, "source": "hard_deny",
+                "reason": decision.reason,
+            })
             return ToolResult(content=f"已拒绝：{decision.reason}")
 
         if decision.action == PermissionAction.ASK:
@@ -479,6 +635,11 @@ class SoulAgent:
         # 3b. D1 — a loaded skill can only NARROW the harness policy.
         ok, reason = self._skill_authorize(call)
         if not ok:
+            await self._aemit(session, EventType.PERMISSION_DENIED, {
+                "call_id": call.id, "tool": call.name,
+                "args": call.arguments, "source": "skill_narrow",
+                "reason": reason,
+            })
             return ToolResult(content=reason)
 
         # 3. execute (failures become data)

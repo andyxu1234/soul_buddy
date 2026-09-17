@@ -26,7 +26,7 @@ export function AttuPanel() {
             target="_blank"
             rel="noopener noreferrer"
           >
-            <Icon name="external-link" size={14} />
+            <Icon name="external" size={14} />
             在浏览器中打开
           </a>
         </div>

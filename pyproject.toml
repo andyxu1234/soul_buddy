@@ -33,6 +33,7 @@ packages = ["soul_buddy", "soul_buddy.providers", "soul_buddy.tools",
            "soul_buddy.permissions", "soul_buddy.context", "soul_buddy.memory",
            "soul_buddy.skills", "soul_buddy.mcp",
            "soul_buddy.experts", "soul_buddy.knowledge",
+           "soul_buddy.rubric",
            "soul_buddy.api", "soul_buddy.api.routers"]
 
 [tool.pytest.ini_options]

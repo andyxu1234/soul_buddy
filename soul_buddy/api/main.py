@@ -5,7 +5,6 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -14,10 +13,14 @@ from .runtime import Runtime, assert_single_worker
 from .deps import COOKIE_NAME
 from .routers import (
     acp, events, experts, file_history, health, kb, maintenance, mcp, memory,
-    permissions, prompt, runs, sessions, shutdown, skills, workspace,
+    permissions, prompt, rubric, runs, sessions, shutdown, skills, tracing,
+    workspace,
 )
 
-load_dotenv()
+# .env is loaded by soul_buddy.config at import time (see _load_env_files), which
+# runs before any of its constants are evaluated. Loading it here as well was
+# both too late for those constants and bypassed SOUL_SKIP_DOTENV, which the
+# test suite relies on to stay independent of the developer's local .env.
 
 # Dev origins allowed when SOUL_DEV=1 (Vite dev server). Empty in production so
 # the renderer is always served same-origin by this sidecar (no CORS needed).
@@ -50,7 +53,8 @@ def create_app(static_dir: str | None = None) -> FastAPI:
     for r in (sessions.router, runs.router, events.router, health.router,
               acp.router, permissions.router, maintenance.router, shutdown.router,
               mcp.router, file_history.router, skills.router, prompt.router,
-              memory.router, experts.router, kb.router, workspace.router):
+              memory.router, experts.router, kb.router, workspace.router,
+              rubric.router, tracing.router):
         app.include_router(r)
 
     # Static frontend (P4): serve the built React app same-origin. Mounted last

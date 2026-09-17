@@ -84,6 +84,10 @@ class EventType(str, Enum):
     PERMISSION_REQUEST = "permission_request"
     PERMISSION_RESOLVED = "permission_resolved"
     PERMISSION_EXPIRED = "permission_expired"
+    # 早退留痕:重复调用拦截 / hard_deny / skill 窄化,这三条路径过去只把
+    # 结果回给模型、不留事件,导致"这次 run 有没有被拒过危险操作"从
+    # transcript 里查不出来。rubric 的安全维度(G1)依赖它。
+    PERMISSION_DENIED = "permission_denied"
     TURN_BUDGET_WARNING = "turn_budget_warning"
     ASSISTANT_DELTA = "assistant_delta"     # P5 streaming (bus-only, not persisted)
     REASONING_DELTA = "reasoning_delta"     # reasoning 流式 chunk (bus-only, not persisted)
@@ -96,6 +100,13 @@ class EventType(str, Enum):
     CONTEXT_LIMIT_EXCEEDED = "context_limit_exceeded"  # P0-4 硬上限预检: 压缩后仍超窗,受控终止
     FINAL_PROMPT = "final_prompt"               # 每轮实际发给 LLM 的最终拼接提示词 (system + messages,调试/审计用)
     ERROR = "error"
+
+    # === P6 运行时 rubric 自评闭环 ===
+    RUBRIC_EVALUATED = "rubric_evaluated"               # 每次验收后(含 advisory),载荷为整份 RubricReport
+    RUBRIC_RETRY = "rubric_retry"                       # 决定重修:注入反馈并回到主循环
+    RUBRIC_PASSED = "rubric_passed"                     # 验收通过
+    RUBRIC_FAILED = "rubric_failed"                     # 未通过且不重修(含超限/不可重修)
+    RUBRIC_SAFETY_VIOLATION = "rubric_safety_violation"  # G1 违反:立即终止,不重修 (INV-19)
 
     # === 已删除 ===
     # USER = "user"           → 合并到 MESSAGE(role:"user")
@@ -159,3 +170,6 @@ class RunResult:
     truncated: bool = False
     reason: str | None = None
     modified_files: list[str] = field(default_factory=list)
+    # P6: RubricReport.to_dict() when the verification stage ran; None when the
+    # rubric is off, so existing callers see no change (INV-21).
+    rubric: dict | None = None

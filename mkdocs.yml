@@ -74,6 +74,8 @@ nav:
   - 17 Human-in-the-Loop（人工介入）: modules/17-human-in-the-loop.md
   - 18 Skills（技能系统）: modules/18-skills.md
   - 19 MCP 连接器: modules/19-mcp.md
+  - 20 运行时 Rubric 自评闭环: modules/20-rubric.md
+  - Rubric 设计基线: rubric-design.md
   - 工具权限设计: problems/001-tools-permissions-design.md
   - Subagent 阻塞事件循环: problems/002-subagent-blocks-event-loop.md
   - 文件历史快照: problems/file-history-snapshot.md

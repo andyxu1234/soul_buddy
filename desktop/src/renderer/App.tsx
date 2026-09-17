@@ -11,6 +11,8 @@ import { ExpertPanel } from './components/ExpertPanel'
 import { KnowledgePanel } from './components/KnowledgePanel'
 import { AttuPanel } from './components/AttuPanel'
 import { McpPanel } from './components/McpPanel'
+import { RubricPanel } from './components/RubricPanel'
+import { LangSmithPanel } from './components/LangSmithPanel'
 import { NewTaskModal, RenameModal, ConfirmModal } from './components/NewTaskModal'
 import { Icon } from './components/Icon'
 import { applyTheme, loadTheme, saveTheme, watchSystemTheme, type ThemeMode } from './theme'
@@ -450,6 +452,10 @@ export default function App() {
         <AttuPanel />
       ) : activeView === 'mcp' ? (
         <McpPanel onToast={pushToast} />
+      ) : activeView === 'rubric' ? (
+        <RubricPanel onToast={pushToast} />
+      ) : activeView === 'langsmith' ? (
+        <LangSmithPanel onToast={pushToast} />
       ) : (
         <>
           <ChatPanel

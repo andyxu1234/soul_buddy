@@ -34,6 +34,9 @@ interface SoulApi {
   deleteKbDocument: (kbId: string, docId: string) => Promise<unknown>
   reindexKbDocument: (kbId: string, docId: string) => Promise<unknown>
   kbSearch: (query: string, kbIds?: string[], topK?: number) => Promise<unknown>
+  listRubricReports: (limit?: number, offset?: number, mode?: string) => Promise<unknown>
+  getRubricSummary: () => Promise<unknown>
+  getTracingStatus: () => Promise<unknown>
 }
 
 /** Native helpers bridged from the main process (no Node in the renderer). */
@@ -167,6 +170,18 @@ export const api = {
       results: Array<{ doc_name: string; heading_path: string; text: string; score: number }>
       count: number
     }>,
+  // Runtime rubric (P6): persisted reports + aggregated §7.3 dashboard metrics
+  listRubricReports: (limit?: number, offset?: number, mode?: string) =>
+    getSoul().listRubricReports(limit, offset, mode) as Promise<{
+      reports: RubricReportRow[]
+      count: number
+      config_mode: string
+      enabled: boolean
+    }>,
+  getRubricSummary: () =>
+    getSoul().getRubricSummary() as Promise<RubricSummary>,
+  getTracingStatus: () =>
+    getSoul().getTracingStatus() as Promise<TracingStatus>,
 }
 
 interface ApiErrorShape { status: number; detail: unknown }
@@ -212,6 +227,80 @@ export interface ExpertRow {
   replaceCore: boolean
   createdAt: number
   updatedAt: number
+}
+
+/** One scored dimension inside a rubric report. */
+export interface RubricDimension {
+  id: string
+  name: string
+  /** gating: 1 pass / 0 fail; quality: 0-3; null = not applicable */
+  score: number | null
+  reason: string
+  judge: 'rule' | 'llm'
+  applicable: boolean
+}
+
+/** A single run's rubric report (body of `<request_id>.json`). */
+export interface RubricResult {
+  passed: boolean
+  total: number
+  threshold: number
+  gating: RubricDimension[]
+  quality: RubricDimension[]
+  failed_gating: string[]
+  mode: string
+  degraded: boolean
+  retries_used: number
+  safety_violation: boolean
+  detail: string
+}
+
+/** A report plus the session context the API attaches for grouping. */
+export interface RubricReportRow {
+  request_id: string
+  session_id: string
+  project: string
+  mtime: number
+  path: string
+  report: RubricResult
+}
+
+/** Aggregated §7.3 metrics over every persisted report. */
+export interface RubricSummary {
+  runs: number
+  passed: number
+  pass_rate: number | null
+  average_total: number | null
+  task_completion_rate: number | null
+  tool_selection_accuracy: number | null
+  safety_violations: number
+  g1_failures: number
+  degraded: number
+  modes: Record<string, number>
+  dimension_averages: Record<string, number>
+  dimension_counts: Record<string, number>
+  dimension_meta: {
+    gating: Array<{ id: string; name: string; desc: string; kind: string }>
+    quality: Array<{ id: string; name: string; desc: string; weight: number }>
+  }
+  thresholds: { completion: number; tool_selection: number }
+  config_mode: string
+  enabled: boolean
+}
+
+/** Effective LangSmith tracing configuration (key is never sent). */
+export interface TracingStatus {
+  enabled: boolean
+  ready: boolean
+  sdk_available: boolean
+  tracing_flag: boolean
+  api_key_set: boolean
+  project: string
+  endpoint: string
+  /** Empty when ready; otherwise a human-readable reason it is not tracing. */
+  reason: string
+  console_url: string
+  project_url: string
 }
 
 export interface MemoryItemRow {

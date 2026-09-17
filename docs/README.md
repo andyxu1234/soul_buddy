@@ -61,6 +61,8 @@ Get-Process electron,python -ErrorAction SilentlyContinue | Stop-Process -Force
 | **[learn-workbuddy-mapping.md](./learn-workbuddy-mapping.md)** | 章节对照表：s01–s24 每一章对应 soul_buddy 哪个模块、该抄还是该弃、属于哪个阶段 | 与教学代码对照时 |
 | **[test-analysis.md](./test-analysis.md)** | 需求解析：11 个模块划分、**30 条业务规则**、**Q01–Q26 疑问 + 澄清列**、全量测试点、风险矩阵、准出标准 | 开工前看 —— 澄清已闭环 |
 | **[test-cases.md](./test-cases.md)** | 完整用例集：**144 条**（含正常 / 异常 / 边界 / 安全 / AI 专项），无阻塞项 | 开发与自测时逐条对照 |
+| **[rubric-design.md](./rubric-design.md)** | **运行时 rubric 自评闭环**：维度模型（gating + quality）、信号源映射、规则/LLM 分层判分、聚合门槛、与 `agent.py` 的集成点、INV-15~21、R0–R5 落地分期 | 要动 agent 主循环 / 做交付质量闭环时 |
+| **[modules/20-rubric.md](./modules/20-rubric.md)** | rubric 模块实现文档：文件清单、维度与信号源、主循环集成、降级、**§18 验证记录** | 改 rubric 时 |
 | **[modules/INDEX.md](./modules/INDEX.md)** | 模块文档总览：按代码包拆分的 15 份模块 md（职责 / 文件清单 / 设计约束），**全部已实现** | 改某模块前读对应文档 |
 
 > ⚠️ 评审结论：**条件可行**。技术可行，但工期原估乐观约一倍（实际 8.5–11 周全职），
@@ -90,6 +92,7 @@ Get-Process electron,python -ErrorAction SilentlyContinue | Stop-Process -Force
 - [x] P4 Electron 桌面壳（sidecar 生命周期 + 看门狗）
 - [x] P3 记忆 + SQLite
 - [x] P5 skills/MCP + 子代理 + 正式打包
+- [x] 运行时 rubric 自评闭环（R0–R5 已落地：[rubric-design.md](./rubric-design.md) 设计 · [modules/20-rubric.md](./modules/20-rubric.md) 实现 · `SOUL_RUBRIC_MODE=advisory|enforce` 启用）
 - [ ] 后续打磨（详见 [agent-loop-map.md](./agent-loop-map.md) §12 的已知缺口清单）
 
 ---

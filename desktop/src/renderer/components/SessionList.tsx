@@ -79,7 +79,7 @@ const NAV_SOON = [
   { icon: 'zap', label: '自动化' },
 ] as const
 
-export type NavView = 'chat' | 'skills' | 'expert' | 'mcp' | 'knowledge' | 'attu'
+export type NavView = 'chat' | 'skills' | 'expert' | 'mcp' | 'knowledge' | 'attu' | 'rubric' | 'langsmith'
 
 export function SessionList({
   sessions, selectedId, runningIds, collapsed,
@@ -219,6 +219,15 @@ export function SessionList({
         </button>
 
         <button
+          className={`nav-item ${activeView === 'rubric' ? 'active' : ''}`}
+          onClick={() => onViewChange?.('rubric')}
+          title="Rubric 能力报告"
+        >
+          <span className="ni-icon"><Icon name="shield" size={16} /></span>
+          <span className="ni-label">Rubric</span>
+        </button>
+
+        <button
           className={`nav-item ${activeView === 'knowledge' ? 'active' : ''}`}
           onClick={() => onViewChange?.('knowledge')}
           title="资料库"
@@ -234,6 +243,15 @@ export function SessionList({
         >
           <span className="ni-icon"><Icon name="database" size={16} /></span>
           <span className="ni-label">Milvus Attu</span>
+        </button>
+
+        <button
+          className={`nav-item ${activeView === 'langsmith' ? 'active' : ''}`}
+          onClick={() => onViewChange?.('langsmith')}
+          title="LangSmith 追踪"
+        >
+          <span className="ni-icon"><Icon name="activity" size={16} /></span>
+          <span className="ni-label">LangSmith</span>
         </button>
 
         {NAV_SOON.map((n) => (

@@ -56,6 +56,12 @@ class ProviderRequest:
 
 class Provider(ABC):
     name: str = "base"
+    # Whether this provider is backed by a real model. The offline provider
+    # sets this to False so callers that would otherwise spend a call can skip
+    # it instead of guessing (rubric judge degradation, see rubric/judge.py).
+    # A capability flag rather than a name check: comparing `name` breaks the
+    # moment someone subclasses the offline provider for tests.
+    llm_backed: bool = True
 
     @abstractmethod
     def create(self, req: ProviderRequest) -> ModelTurn: ...

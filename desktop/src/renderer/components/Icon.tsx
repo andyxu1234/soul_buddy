@@ -49,6 +49,7 @@ export type IconName =
   | 'brain'
   | 'link'
   | 'database'
+  | 'activity'
 
 const PATHS: Record<IconName, JSX.Element> = {
   plus: <path d="M12 5v14M5 12h14" />,
@@ -237,6 +238,8 @@ const PATHS: Record<IconName, JSX.Element> = {
       <path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" />
     </>
   ),
+  // 追踪 / 可观测性：脉冲波形
+  activity: <path d="M22 12h-4l-3 9L9 3l-3 9H2" />,
 }
 
 export interface IconProps {

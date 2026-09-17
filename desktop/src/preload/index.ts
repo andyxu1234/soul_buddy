@@ -119,6 +119,18 @@ const api = {
     request('POST', '/api/v1/kb/search', {
       query, ...(kbIds ? { kb_ids: kbIds } : {}), ...(topK ? { top_k: topK } : {}),
     }),
+  // LangSmith: effective tracing status (never returns the API key)
+  getTracingStatus: () => request('GET', '/api/v1/tracing/status'),
+  // Runtime rubric (P6): persisted per-run reports + §7.3 aggregate metrics
+  listRubricReports: (limit?: number, offset?: number, mode?: string) => {
+    const q = new URLSearchParams()
+    if (limit) q.set('limit', String(limit))
+    if (offset) q.set('offset', String(offset))
+    if (mode) q.set('mode', mode)
+    const qs = q.toString()
+    return request('GET', `/api/v1/rubric/reports${qs ? `?${qs}` : ''}`)
+  },
+  getRubricSummary: () => request('GET', '/api/v1/rubric/summary'),
 }
 
 // Native (main-process) helpers — no Node access from the renderer.

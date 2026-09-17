@@ -3,8 +3,25 @@ import os
 import tempfile
 
 # Must be set BEFORE importing the package so config reads it.
+# config.py loads .env at import time (override=False), so anything pinned here
+# wins over whatever the developer's .env happens to say.
+#
+# Third-party imports may also call load_dotenv() on their own, which would pull
+# the developer's .env into os.environ even though config.py honours the skip
+# switch. Pinning these first keeps the suite hermetic either way, because
+# load_dotenv(override=False) never overwrites an existing variable.
+for _var in ("MILVUS_URI", "EMBEDDING_BASE_URL", "EMBEDDING_API_KEY",
+             "EMBEDDING_MODEL", "EMBEDDING_DIMS", "SOUL_PROVIDER"):
+    os.environ[_var] = ""
+
 _TMP_HOME = tempfile.mkdtemp(prefix="soul_test_home_")
 os.environ["SOUL_BUDDY_HOME"] = _TMP_HOME
+# Belt and braces: config.py skips the .env lookup entirely under this switch,
+# so its module-level constants (RUBRIC_MODE, LOG_LEVEL, …) stay at defaults.
+os.environ["SOUL_SKIP_DOTENV"] = "1"
+# Rubric is driven through an explicit RubricPolicy in tests, never via config,
+# but pin it anyway so a shell-exported value can't leak in either.
+os.environ["SOUL_RUBRIC_MODE"] = "off"
 
 import pytest  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -41,7 +58,7 @@ def workspace(tmp_path):
 
 
 def _make_agent(workspace: Path, script=None, default: ModelTurn | None = None,
-                events=None, provider=None, stream: bool = False):
+                events=None, provider=None, stream: bool = False, rubric=None):
     storage = SessionStore()
     audit = AuditLog()
     if provider is None:
@@ -60,7 +77,7 @@ def _make_agent(workspace: Path, script=None, default: ModelTurn | None = None,
     registry = build_default_registry()
     events = events or _EventsStub()
     agent = SoulAgent(storage, registry, events, audit, provider, policy,
-                      stream=stream)
+                      stream=stream, rubric=rubric)
     return agent, session, storage
 
 
@@ -73,6 +90,8 @@ class _EventsStub:
 
 @pytest.fixture
 def make_agent(workspace):
-    def _f(script=None, default=None, events=None, provider=None, stream=False):
-        return _make_agent(workspace, script, default, events, provider, stream)
+    def _f(script=None, default=None, events=None, provider=None,
+           stream=False, rubric=None):
+        return _make_agent(workspace, script, default, events, provider,
+                           stream, rubric)
     return _f

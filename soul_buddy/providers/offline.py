@@ -39,6 +39,7 @@ def _synthesize_raw(turn: ModelTurn) -> dict:
 
 class OfflineProvider(Provider):
     name = "offline"
+    llm_backed = False
 
     def __init__(self) -> None:
         self._script: list[Union[ModelTurn, Callable[[ProviderRequest], ModelTurn]]] = []
