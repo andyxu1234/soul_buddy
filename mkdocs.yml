@@ -78,6 +78,7 @@ nav:
   - Rubric 设计基线: rubric-design.md
   - 工具权限设计: problems/001-tools-permissions-design.md
   - Subagent 阻塞事件循环: problems/002-subagent-blocks-event-loop.md
+  - bash 工具 shell 契约缺失: problems/003-bash-shell-mismatch.md
   - 文件历史快照: problems/file-history-snapshot.md
   - 测试分析: test-analysis.md
   - 测试用例: test-cases.md

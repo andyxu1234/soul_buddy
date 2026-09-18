@@ -62,12 +62,32 @@ _TOOL_HANDLERS = {
 _TOOL_SPECS = [
     {
         "name": "bash",
-        "description": "Run a shell command. Use for build/test/git and any task a terminal would do. "
-                       "Single-line commands only.",
+        "description": (
+            "Run a single-line shell command on Windows via **Git Bash** "
+            "(POSIX syntax), not cmd.exe or PowerShell.\n"
+            "\n"
+            "Correct syntax:\n"
+            "  ls -la && cat README.md\n"
+            "  grep -rn \"TODO\" src/ | head -20\n"
+            "\n"
+            "WRONG — cmd.exe/PowerShell syntax is rejected or fails:\n"
+            "  cd /d C:\\path         (cd /d is cmd-only; just use relative paths)\n"
+            "  if exist file.txt ...  (use `test -f file.txt`)\n"
+            "  dir /s, del /f, %VAR%, Get-ChildItem, $env:VAR\n"
+            "\n"
+            "The command already runs with the workspace root as its working "
+            "directory — use RELATIVE paths (src/main.py). Absolute paths outside "
+            "the workspace are blocked by the permission layer. Commands that "
+            "reference out-of-workspace paths are denied before execution.\n"
+            "\n"
+            "Use for build/test/git/install or when a task genuinely needs a shell. "
+            "Prefer dedicated tools for file work: glob (not `find`), grep (not "
+            "`grep -r`), read_file (not `cat`), write_file/edit_file (not redirects)."
+        ),
         "parameters": {
             "type": "object",
             "properties": {"command": {"type": "string",
-                                       "description": "the shell command to run"}},
+                                       "description": "the single-line POSIX shell command to run"}},
             "required": ["command"],
         },
     },

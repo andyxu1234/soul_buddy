@@ -1,0 +1,41 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // 调试 Agent 主循环（推荐入口）
+      // 不需要 Electron、不烧 token —— 用 offline provider 脚本化多轮回放。
+      // 断点建议：agent.py::run 的 for turn 循环体（约 :144 起）
+      "name": "Agent Loop (offline, 逐步)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/script/debug_agent_loop.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "SOUL_SKIP_DOTENV": "1"
+      }
+    },
+    {
+      // 调试真实 sidecar（接真模型，会烧 token）
+      // 启动后访问 http://127.0.0.1:8000/docs 发请求
+      "name": "Sidecar (real provider)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "soul_buddy.api",
+      "args": ["--port", "8000", "--token", "devtoken"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      // attach 到 Electron 拉起的 sidecar（需先在 __main__.py 里
+      // 临时加 debugpy.listen(5678); debugpy.wait_for_client()）
+      "name": "Attach to Sidecar",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "127.0.0.1", "port": 5678 },
+      "justMyCode": false
+    }
+  ]
+}
