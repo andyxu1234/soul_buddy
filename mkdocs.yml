@@ -9,10 +9,10 @@ edit_uri: edit/main/docs/
 docs_dir: docs
 site_dir: site
 
-# 排除生成脚本，不进入站点输出
+# 排除生成脚本 / hook，不进入站点输出
 exclude_docs: |
   _gen_*.py
-  _slugify.py
+  hooks/
 
 theme:
   name: material
@@ -105,15 +105,19 @@ nav:
       - 05 STAR 面试稿: knowledge/ai-agent-interview-guide/docs/05-STAR面试稿/README.md
       - 06 面试问答集: knowledge/ai-agent-interview-guide/docs/06-面试问答集/README.md
 
+# MkDocs hook：注册保留中文的 slugify。
+# 不能用 `slugify: !!python/name:docs._slugify.slugify` —— 那要求 PyYAML 在
+# 解析配置时 import 名为 `docs` 的模块，只有「从仓库根运行」时才碰巧成立，
+# CI 上会报 cannot find module 'docs._slugify'。hooks 按路径加载，无此问题。
+hooks:
+  - docs/hooks/slugify_hook.py
+
 # 渲染扩展：mermaid 图 + 表格 + 目录锚点
 markdown_extensions:
   - attr_list
   - tables
   - toc:
       permalink: true
-      # 默认 slugify 会丢掉中文（「1. 什么是 AI Agent」-> `1-ai-agent`），
-      # 导致 knowledge/ 下各文手写的目录锚点全部失效。改用保留 CJK 的实现。
-      slugify: !!python/name:docs._slugify.slugify
       separator: "-"
   - pymdownx.superfences:
       custom_fences:
