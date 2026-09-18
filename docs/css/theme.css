@@ -166,17 +166,47 @@ body[data-md-color-scheme="slate"] {
   background-color: rgba(255, 255, 255, .14);
 }
 
-.sb-nav-toggle .sb-nav-toggle__state {
-  display: none;
+/* ---------------------------------------------------------------------------
+   2b. 折叠开关的硬兜底 —— 尺寸绝不交给媒体查询
+   ---------------------------------------------------------------------------
+   踩过的坑：CSS 还是旧缓存、HTML 已经是新版 —— 按钮出现在页面上，但它的样式
+   没到位。SVG 拿不到尺寸就会退化成浏览器**默认的 300×150**，一个巨大的黑方块
+   糊在右侧目录上（用户截图反馈）。而同一个按钮里的状态 checkbox 也会跟着
+   「裸奔」成一个 13px 的空方块。
+
+   所以这一段的规则**不带任何 @media**：
+     * 注入的 <svg> 自带 width/height="24" 表现属性（优先级最低，有 CSS 时被
+       覆盖成 1rem，没有 CSS 时也只是 24px，而不是 300px）；
+     * 这里再无条件把尺寸与 checkbox 钉死一遍。
+
+   媒体查询只负责「位置与观感」，不负责「会不会炸」。
+   ------------------------------------------------------------------------ */
+.sb-nav-toggle svg,
+.sb-toc-toggle svg {
+  display: block;
+  flex: none;
+  height: 1rem;
+  width: 1rem;
 }
 
-/* 收起态：图标镜像一下，表示「可向右展开」 */
-.sb-nav-toggle svg {
-  transform: rotate(0deg);
-  transition: transform 220ms var(--sb-ease);
+.sb-nav-toggle__state,
+.sb-toc-toggle__state {
+  display: none !important;
 }
 
-html.sb-nav-collapsed .sb-nav-toggle svg {
+/* 面板收起时按钮必须还在原地，所以容器尺寸同样不能只写在媒体查询里 */
+.sb-toc-toggle {
+  align-items: center;
+  border-radius: var(--sb-radius-sm);
+  display: inline-flex;
+  height: 1.4rem;
+  justify-content: center;
+  width: 1.4rem;
+}
+
+/* 收起态：图标镜像一下，表示「可以往回展开」 */
+html.sb-nav-collapsed .sb-nav-toggle svg,
+html.sb-toc-collapsed .sb-toc-toggle svg {
   transform: scaleX(-1);
 }
 
@@ -290,10 +320,6 @@ html.sb-nav-collapsed .sb-nav-toggle svg {
 
   .md-nav--primary .md-nav__link {
     padding: .3em .5em;
-  }
-
-  .md-nav--primary .md-nav__list > .md-nav__item > .md-nav__link {
-    margin-right: .4rem;
   }
 
   /* 箭头：桌面版是统一尺寸的圆点 + 展开时旋转 90° */
@@ -433,20 +459,34 @@ html.sb-nav-collapsed .sb-nav-toggle svg {
   padding-left: .3rem;
 }
 
-/* 当前页高亮 */
+/* 当前页高亮：整条「祖先链」只上色，只有**当前页**才铺底。
+   否则一个深层页面会同时点亮三四个色块，看着像没做完的高亮。 */
 .md-nav--primary .md-nav__link--active,
 .md-nav--primary .md-nav__item--active > .md-nav__link {
   color: var(--md-accent-fg-color) !important;
   font-weight: 600;
 }
 
-.md-nav--primary .md-nav__item--active > .md-nav__link {
-  background-color: var(--md-accent-fg-color--transparent);
+/* 祖先分组：不铺底（注意要带 .md-nav__item--nested，否则会把叶子页也一起
+   变透明——选择器特异性更高，会盖掉下面那条） */
+.md-nav--primary .md-nav__item--nested.md-nav__item--active > .md-nav__link {
+  background-color: transparent;
+}
+
+.md-nav--primary .md-nav__link--active {
+  background-color: var(--sb-mark);
+}
+
+/* 悬停底色：比当前页更轻，且不和当前页抢 */
+.md-nav--primary .md-nav__link:not(.md-nav__link--active):hover {
+  background-color: var(--sb-bg-soft);
+  color: var(--sb-ink);
 }
 
 /* 焦点可见性（无障碍） */
 .md-nav__link:focus-visible,
-.sb-nav-toggle:focus-visible {
+.sb-nav-toggle:focus-visible,
+.sb-toc-toggle:focus-visible {
   outline: 2px solid var(--md-accent-fg-color);
   outline-offset: 2px;
 }
@@ -487,6 +527,13 @@ html.sb-nav-collapsed .sb-nav-toggle svg {
   padding-top: .22em;
 }
 
+/* 一级条目（本页的 H2）比子项略重一点，层级一眼可辨 */
+.md-nav--secondary > .md-nav__list > .md-nav__item > .md-nav__link {
+  color: var(--sb-ink);
+  font-size: .7rem;
+  font-weight: 500;
+}
+
 .md-nav--secondary .md-nav__link:hover {
   color: var(--sb-ink);
 }
@@ -515,24 +562,24 @@ html.sb-nav-collapsed .sb-nav-toggle svg {
     transition: padding 240ms var(--sb-ease), width 240ms var(--sb-ease);
   }
 
+  /* 这里只负责「位置与观感」。尺寸、checkbox 隐藏、收起态镜像都在 2b 里
+     无条件声明过了，那一段才是防炸的那一段。 */
   .sb-toc-toggle {
-    align-items: center;
     background-color: var(--sb-bg);
     border: 1px solid var(--sb-line);
-    border-radius: var(--sb-radius-sm);
-    color: var(--sb-ink-3);
-    display: inline-flex;
-    height: 1.4rem;
-    justify-content: center;
+    box-shadow: var(--sb-shadow-1);
+    color: var(--sb-ink-2);
     left: .35rem;
     position: absolute;
-    /* 负 top：按钮悬在面板上沿外侧（页眉与面板之间那条 30px 空隙）。
+    /* 负 top：按钮悬在面板上沿外侧（页眉与面板之间那条空隙）。
        面板 padding-top 是 1.2rem，目录首条从 y+24 开始；
        按钮若放进面板内就会压住第一条目录，往外提一点就干净了。
        面板 overflow 是 visible，不会被裁。 */
     top: -.5rem;
-    transition: background-color 150ms var(--sb-ease), color 150ms var(--sb-ease);
-    width: 1.4rem;
+    transition:
+      background-color 150ms var(--sb-ease),
+      border-color 150ms var(--sb-ease),
+      color 150ms var(--sb-ease);
     z-index: 3;
   }
 
@@ -542,19 +589,10 @@ html.sb-nav-collapsed .sb-nav-toggle svg {
     color: var(--md-accent-fg-color);
   }
 
+  /* 展开态按 1rem 更协调（2b 里给的 1rem 是兜底值），收起态图标由 2b 镜像 */
   .sb-toc-toggle svg {
     height: .85rem;
-    transition: transform 220ms var(--sb-ease);
     width: .85rem;
-  }
-
-  /* 收起态：图标镜像，表达「可向左展开」 */
-  html.sb-toc-collapsed .sb-toc-toggle svg {
-    transform: scaleX(-1);
-  }
-
-  .sb-toc-toggle .sb-toc-toggle__state {
-    display: none;
   }
 
   /* 收起态：面板宽度归零。

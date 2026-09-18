@@ -1,4 +1,4 @@
-"""MkDocs hook — 把「左侧导航」与「右侧本页目录」的折叠开关注入到每个页面。
+"""MkDocs hook — 注入折叠开关 + 给静态资源打内容指纹。
 
 为什么不改 theme 模板
 --------------------
@@ -18,15 +18,23 @@ hook 会原样返回（站点仍可用，只是少了按钮），并在构建日
 2. header 里 ``for="__drawer"`` 之前：左侧折叠按钮（在页眉左上角）。
 3. ``.md-sidebar--secondary`` 开标签之后：右侧折叠按钮（在目录面板左上角）。
 
-按钮为什么是 ``<label for="__sb_x">`` + 隐藏 checkbox
------------------------------------------------------
-纯 JS 的 ``<button>`` 也能用，但 label+checkbox 天然可聚焦、可键盘触发，
-且禁用 JS 时也不至于变成死按钮（只是不会切换）。状态存储与切换行为由
-``docs/js/nav-toggle.js`` 接管。
+另外注入一处「版本指纹」：``?v=<hash>``
+---------------------------------------
+静态站点最阴的一类故障是 **HTML 与 CSS 版本错配**：GitHub Pages 给资源发
+``Cache-Control: max-age=600``，于是可能出现「HTML 已经带上新按钮，浏览器里
+的 theme.css 还是十分钟前那份」——按钮在了，样式没到。
+这次的直接后果就是：新按钮的 ``<svg>`` 拿不到尺寸，退化成默认的 300×150，
+一个巨大的黑方块糊在侧栏上（用户截图反馈）。
+
+所以这里按**文件内容**算一个短 hash 挂到 ``?v=`` 上。内容一变、URL 就变，
+浏览器与 CDN 都无法再给出旧副本。（``css/theme.css`` 一旦改动，指纹自动更新，
+不需要人工去 bump 什么版本号。）
 """
 from __future__ import annotations
 
+import hashlib
 import logging
+import os
 import re
 
 log = logging.getLogger("mkdocs.hooks.nav_toggle")
@@ -39,17 +47,29 @@ _RE_SECONDARY = re.compile(
     r'(<div class="md-sidebar md-sidebar--secondary"[^>]*>)'
 )
 
+# 需要打指纹的资源（相对 docs/ 的路径）。只列我们自己维护的那几个：
+# Material 自带资源带内容 hash 文件名，不需要管。
+_ASSETS = ("css/theme.css", "js/nav-toggle.js")
+
+_RE_ASSET = re.compile(
+    r'(?P<attr>href|src)="'
+    r'(?P<url>(?:[^"]*/)?(?:' + "|".join(re.escape(a) for a in _ASSETS) + r"))"
+    r'(?:\?[^"]*)?"'
+)
+
 # --- 左侧折叠按钮：「面板 + 左箭头」 -----------------------------------------
+# svg 上的 width/height 是**表现属性**，优先级低于任何 CSS 规则：有样式时被
+# theme.css 覆盖成 1rem，样式缺席时也只是 24px，不会变成 300px 的怪物。
 _BUTTON_NAV = """<label class="md-header__button md-icon sb-nav-toggle" for="__sb_nav" title="收起 / 展开目录（快捷键 \\）" aria-label="收起或展开左侧目录" aria-expanded="true">
 <input type="checkbox" id="__sb_nav" class="sb-nav-toggle__state" tabindex="-1" aria-hidden="true">
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3H3a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1M4 19V5h5v14zm16 0h-9V5h9z"/><path d="M8.5 10.6 6.9 12l1.6 1.4-1 1.1L4.4 12l3.1-2.5z"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M21 3H3a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1M4 19V5h5v14zm16 0h-9V5h9z"/><path d="M8.5 10.6 6.9 12l1.6 1.4-1 1.1L4.4 12l3.1-2.5z"/></svg>
 </label>
 """  # noqa: E501
 
 # --- 右侧折叠按钮：「面板 + 右箭头」 -----------------------------------------
 _BUTTON_TOC = """<label class="sb-toc-toggle" for="__sb_toc" title="收起 / 展开本页目录（快捷键 Shift+\\）" aria-label="收起或展开右侧本页目录" aria-expanded="true">
 <input type="checkbox" id="__sb_toc" class="sb-toc-toggle__state" tabindex="-1" aria-hidden="true">
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3H3a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1M4 19V5h5v14zm16 0h-9V5h9z"/><path d="m15.5 10.6 1.6 1.4-1.6 1.4 1 1.1 3.1-2.5-3.1-2.5z"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M21 3H3a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1M4 19V5h5v14zm16 0h-9V5h9z"/><path d="m15.5 10.6 1.6 1.4-1.6 1.4 1 1.1 3.1-2.5-3.1-2.5z"/></svg>
 </label>
 """  # noqa: E501
 
@@ -62,9 +82,35 @@ _EARLY = (
     "}catch(e){}</script>"
 )
 
+# 一次构建内 docs 目录不会变，指纹算一遍就够；按 docs_dir 缓存。
+_VER_CACHE: dict[str, str] = {}
+
+
+def _asset_version(config) -> str:
+    """按 css/theme.css 与 js/nav-toggle.js 的内容算一个短指纹。"""
+    try:
+        docs_dir = str(config["docs_dir"])
+    except Exception:  # pragma: no cover - 只在 MkDocs 内部结构变化时触发
+        docs_dir = "docs"
+
+    cached = _VER_CACHE.get(docs_dir)
+    if cached:
+        return cached
+
+    digest = hashlib.md5()
+    for rel in _ASSETS:
+        try:
+            with open(os.path.join(docs_dir, rel), "rb") as fh:
+                digest.update(fh.read())
+        except OSError:  # pragma: no cover - 文件缺失时不该让构建挂掉
+            log.warning("nav_toggle_hook: 读不到 %s，资源指纹可能不完整", rel)
+    version = digest.hexdigest()[:10]
+    _VER_CACHE[docs_dir] = version
+    return version
+
 
 def on_post_page(output: str, page, config) -> str:
-    """往渲染结果里注入按钮与首帧脚本。"""
+    """往渲染结果里注入按钮、首帧脚本与资源指纹。"""
     if "</head>" not in output:
         return output
 
@@ -94,5 +140,12 @@ def on_post_page(output: str, page, config) -> str:
     # 3. 首帧脚本
     if "sb-nav-collapsed" not in output:
         output = output.replace("</head>", _EARLY + "</head>", 1)
+
+    # 4. 资源指纹：让 HTML 与 CSS/JS 永远同版本
+    version = _asset_version(config)
+    output = _RE_ASSET.sub(
+        lambda m: '%s="%s?v=%s"' % (m.group("attr"), m.group("url"), version),
+        output,
+    )
 
     return output
