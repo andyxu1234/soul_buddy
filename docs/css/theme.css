@@ -497,6 +497,104 @@ html.sb-nav-collapsed .sb-nav-toggle svg {
 }
 
 /* ---------------------------------------------------------------------------
+   4b. 右侧「本页目录」的折叠开关
+   ---------------------------------------------------------------------------
+   与左侧对称：面板左上角一个图标按钮，收起后面板宽度归零、正文顺势变宽。
+
+   按钮是 .md-sidebar--secondary 的**直接子节点**（不在 __scrollwrap 里），
+   原因有二：
+     1. __scrollwrap 自己 overflow-y:auto，按钮塞进去会跟着目录一起滚走；
+     2. 收起态面板宽度归零，若把按钮放在内部又被裁掉，就永远展不开了。
+   放在面板下、定位用 absolute：面板是 position:sticky，天然是包含块。
+
+   定位只用 left 一个属性，展开/收起都靠**包含块左边缘的移动**来带动按钮，
+   这样 transition 才是连续的（left: 定值 → 不需要在两种状态间改 left）。
+   ------------------------------------------------------------------------ */
+@media screen and (min-width: 60em) {
+  .md-sidebar--secondary {
+    transition: padding 240ms var(--sb-ease), width 240ms var(--sb-ease);
+  }
+
+  .sb-toc-toggle {
+    align-items: center;
+    background-color: var(--sb-bg);
+    border: 1px solid var(--sb-line);
+    border-radius: var(--sb-radius-sm);
+    color: var(--sb-ink-3);
+    display: inline-flex;
+    height: 1.4rem;
+    justify-content: center;
+    left: .35rem;
+    position: absolute;
+    /* 负 top：按钮悬在面板上沿外侧（页眉与面板之间那条 30px 空隙）。
+       面板 padding-top 是 1.2rem，目录首条从 y+24 开始；
+       按钮若放进面板内就会压住第一条目录，往外提一点就干净了。
+       面板 overflow 是 visible，不会被裁。 */
+    top: -.5rem;
+    transition: background-color 150ms var(--sb-ease), color 150ms var(--sb-ease);
+    width: 1.4rem;
+    z-index: 3;
+  }
+
+  .sb-toc-toggle:hover {
+    background-color: var(--md-accent-fg-color--transparent);
+    border-color: var(--md-accent-fg-color);
+    color: var(--md-accent-fg-color);
+  }
+
+  .sb-toc-toggle svg {
+    height: .85rem;
+    transition: transform 220ms var(--sb-ease);
+    width: .85rem;
+  }
+
+  /* 收起态：图标镜像，表达「可向左展开」 */
+  html.sb-toc-collapsed .sb-toc-toggle svg {
+    transform: scaleX(-1);
+  }
+
+  .sb-toc-toggle .sb-toc-toggle__state {
+    display: none;
+  }
+
+  /* 收起态：面板宽度归零。
+     注意**不能**给面板加 opacity / visibility —— 按钮是它的子节点，会一起消失。
+     要藏就只藏目录本体。 */
+  html.sb-toc-collapsed .md-sidebar--secondary {
+    padding-left: 0;
+    padding-right: 0;
+    width: 0;
+  }
+
+  html.sb-toc-collapsed .md-sidebar--secondary .md-sidebar__scrollwrap {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  /* 面板归零后按钮就在视口右缘，往左挪一个身位，避免贴边/溢出 */
+  html.sb-toc-collapsed .sb-toc-toggle {
+    left: -1.8rem;
+  }
+
+  /* 正文右侧留出让位空间，免得文字跑到按钮底下 */
+  html.sb-toc-collapsed .md-content > .md-content__inner {
+    padding-right: 2.2rem;
+  }
+
+  /* 有些页面没有本页目录，Material 会给面板加 hidden；此时开关没有意义 */
+  html:has(.md-sidebar--secondary[hidden]) .sb-toc-toggle {
+    display: none;
+  }
+}
+
+/* 窄屏：右侧目录本来就不显示（Material 原生行为），开关一并隐藏 */
+@media screen and (max-width: 59.984375em) {
+  .sb-toc-toggle {
+    display: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
    5. 正文排版
    ------------------------------------------------------------------------ */
 @media screen and (min-width: 76.25em) {
