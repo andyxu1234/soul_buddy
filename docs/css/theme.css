@@ -41,14 +41,37 @@
   --sb-ease: cubic-bezier(.4, 0, .2, 1);
 
   /* 字体：不走 Google Fonts（国内 fonts.googleapis.com 会超时），改用系统栈。
-     中文优先 PingFang / 微软雅黑 / Noto，西文交给 system-ui。 */
-  --md-text-font-family:
+     中文优先 PingFang / 微软雅黑 / Noto，西文交给 system-ui。
+     注意：这里只定义自己的 --sb-font-*，真正的映射在下面 body 规则里做，
+     原因见那段注释（Material 把 --md-text-font-family 声明在 body 上）。 */
+  --sb-font-sans:
     system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
     "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei",
     "Source Han Sans SC", "Noto Sans CJK SC", "WenQuanYi Micro Hei", sans-serif;
-  --md-code-font-family:
+  --sb-font-mono:
     "JetBrains Mono", "Cascadia Code", "SF Mono", Menlo, Consolas,
     "Liberation Mono", "Microsoft YaHei Mono", monospace;
+}
+
+/* ---------------------------------------------------------------------------
+   1b. 字体映射必须写在 body 上，不能只写 :root
+   ---------------------------------------------------------------------------
+   Material 的 main.css 里是这样声明的（已核对 min.css 原文）：
+
+     body { --md-text-font-family: var(--md-text-font, _), -apple-system, …;
+            --md-code-font-family: var(--md-code-font, _), SFMono-Regular, … }
+     aside, body, input { font-family: var(--md-text-font-family) }
+     code, kbd, pre     { font-family: var(--md-code-font-family) }
+
+   变量挂在 **body**（不是 :root）。CSS 里同一个元素自身的声明永远优先于
+   从祖先继承来的值，所以在 :root 里重定义是**无效的**——会被 body 上那份
+   无声压掉，页面照旧渲染成 Helvetica/Arial（实测确认过）。
+   theme.css 排在 main.css 之后加载，同特异性下后者胜，因此在 body 上再声明
+   一次即可覆盖。 */
+body {
+  --md-text-font-family: var(--sb-font-sans);
+  --md-code-font-family: var(--sb-font-mono);
+  font-family: var(--md-text-font-family);
 }
 
 /* --- 浅色 --- */
