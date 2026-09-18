@@ -45,3 +45,6 @@ build/mermaid.min.js
 
 # Throwaway debug / verification scripts (keep ad-hoc scratch out of the repo)
 script/_tmp_*.py
+
+# 本地视觉核对用的临时截图目录
+.tmp-shots/

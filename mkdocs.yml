@@ -17,6 +17,9 @@ exclude_docs: |
 theme:
   name: material
   language: zh
+  # 不用 Google Fonts：国内访问 fonts.googleapis.com 会超时，
+  # 字体改为系统栈（见 docs/css/theme.css），零请求、中文渲染更自然。
+  font: false
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
@@ -31,86 +34,99 @@ theme:
         icon: material/weather-night
         name: 切换到深色模式
   features:
-    - navigation.tabs          # 顶层进顶部标签栏
+    # 不启用 navigation.tabs：Material 的标签栏在 <76.25em 会被直接
+    # display:none，窄一点的窗口上「一级导航」就凭空消失了。改用单一
+    # 层次化侧栏（一级/二级/三级分组全部可点击展开），各宽度行为一致。
     - navigation.top           # 回到顶部按钮
     - navigation.tracking      # 标题锚点跟随滚动高亮
-    - navigation.indexes       # 允许「索引页」挂 section
     - toc.follow               # 右侧目录跟随滚动
-    - content.code.copy
-    - content.action.edit
+    - content.code.copy        # 代码块复制按钮
+    - content.action.edit      # 编辑本页
 
+# ── 导航：三级层次 ──────────────────────────────────────────────
+#   第 1 级 → 左侧导航的一级分组（可点击展开 / 收起）
+#   第 2 级 → 分组内的页面
+#   第 3 级 → 页面下再嵌套一层分组（同样可点击展开）
+# 注意：分组内**不要**放 index.md / INDEX.md 作为首项，否则父级行会变成
+#       跳转链接而不是折叠开关（点击父级应展开子级，而不是跳页）。
 nav:
-  # ── 顶层为「页面」而非「分组」：这样才能渲染成顶部 tabs，
-  #    且侧边栏直接列出该 tab 的全部条目（无折叠箭头、无需下钻）。
-  - 简介: README.md
-  - 项目总览: overview.md
-  - 可行性分析: feasibility-analysis.md
-  - 实施计划: implementation-plan.md
-  - 项目全景思维导图: architecture-mindmap.md
-  - Agent 循环全景图: agent-loop-map.md
-  - 数据与存储架构: data-and-storage.md
-  - RAG 管线全景: rag-pipeline.md
-  - 桌面端架构与生命周期: desktop-architecture.md
-  - Skills 与 MCP 系统: skills-and-mcp.md
-  - Subagent 架构: subagents-architecture.md
-  - 模块索引: modules/INDEX.md
-  - 与 learn-workbuddy 对照: learn-workbuddy-mapping.md
-  - Deep Agents 差距分析: deepagents-gap-analysis.md
-  - 01 配置与全局常量: modules/01-config.md
-  - 02 数据模型: modules/02-models.md
-  - 03 事件总线与 SSE: modules/03-events.md
-  - 04 持久化（JSONL transcript）: modules/04-storage.md
-  - 05 审计链: modules/05-audit.md
-  - 06 Agent 执行循环: modules/06-agent.md
-  - 07 Provider 适配层: modules/07-providers.md
-  - 08 权限治理层: modules/08-permissions.md
-  - 09 工具执行层: modules/09-tools.md
-  - 10 上下文管理: modules/10-context.md
-  - 11 记忆层: modules/11-memory.md
-  - 12 API 与实时通道: modules/12-api.md
-  - 13 桌面壳 / 打包 / 安装: modules/13-desktop.md
-  - 14 资料库 / RAG: modules/14-knowledge.md
-  - 15 专家系统: modules/15-experts.md
-  - 16 上下文压缩（Compact）: modules/16-compact.md
-  - 17 Human-in-the-Loop（人工介入）: modules/17-human-in-the-loop.md
-  - 18 Skills（技能系统）: modules/18-skills.md
-  - 19 MCP 连接器: modules/19-mcp.md
-  - 20 运行时 Rubric 自评闭环: modules/20-rubric.md
-  - Rubric 设计基线: rubric-design.md
-  - 工具权限设计: problems/001-tools-permissions-design.md
-  - Subagent 阻塞事件循环: problems/002-subagent-blocks-event-loop.md
-  - bash 工具 shell 契约缺失: problems/003-bash-shell-mismatch.md
-  - 文件历史快照: problems/file-history-snapshot.md
-  - 测试分析: test-analysis.md
-  - 测试用例: test-cases.md
-  - 安全与质量审计 2026-09-13: security-audit-2026-09-13.md
-  # ── 知识库：AI Agent 面试攻略（docs/knowledge/ai-agent-interview-guide/）
-  #    顶层为「页面」，才能渲染成顶部 tab；子项在侧栏直接列出。
-  - AI Agent 面试攻略:
+  - 概览:
+      - 简介: README.md
+      - 项目总览: overview.md
+      - 可行性分析: feasibility-analysis.md
+      - 实施计划: implementation-plan.md
+  - 架构图谱:
+      - 项目全景思维导图: architecture-mindmap.md
+      - Agent 循环全景图: agent-loop-map.md
+      - 数据与存储架构: data-and-storage.md
+      - RAG 管线全景: rag-pipeline.md
+      - 桌面端架构与生命周期: desktop-architecture.md
+      - Subagent 架构: subagents-architecture.md
+      - Skills 与 MCP 系统: skills-and-mcp.md
+  - 模块详解:
+      - 模块索引: modules/INDEX.md
+      - 01 配置与全局常量: modules/01-config.md
+      - 02 数据模型: modules/02-models.md
+      - 03 事件总线与 SSE: modules/03-events.md
+      - 04 持久化（JSONL transcript）: modules/04-storage.md
+      - 05 审计链: modules/05-audit.md
+      - 06 Agent 执行循环: modules/06-agent.md
+      - 07 Provider 适配层: modules/07-providers.md
+      - 08 权限治理层: modules/08-permissions.md
+      - 09 工具执行层: modules/09-tools.md
+      - 10 上下文管理: modules/10-context.md
+      - 11 记忆层: modules/11-memory.md
+      - 12 API 与实时通道: modules/12-api.md
+      - 13 桌面壳 / 打包 / 安装: modules/13-desktop.md
+      - 14 资料库 / RAG: modules/14-knowledge.md
+      - 15 专家系统: modules/15-experts.md
+      - 16 上下文压缩（Compact）: modules/16-compact.md
+      - 17 Human-in-the-Loop（人工介入）: modules/17-human-in-the-loop.md
+      - 18 Skills（技能系统）: modules/18-skills.md
+      - 19 MCP 连接器: modules/19-mcp.md
+      - 20 运行时 Rubric 自评闭环: modules/20-rubric.md
+  - 设计专题:
+      - Rubric 设计基线: rubric-design.md
+      - 与 learn-workbuddy 对照: learn-workbuddy-mapping.md
+      - Deep Agents 差距分析: deepagents-gap-analysis.md
+      - 问题复盘:
+          - 001 工具权限设计: problems/001-tools-permissions-design.md
+          - 002 Subagent 阻塞事件循环: problems/002-subagent-blocks-event-loop.md
+          - 003 bash 工具 shell 契约缺失: problems/003-bash-shell-mismatch.md
+          - 文件历史快照: problems/file-history-snapshot.md
+  - 测试与质量:
+      - 测试分析: test-analysis.md
+      - 测试用例: test-cases.md
+      - 安全与质量审计 2026-09-13: security-audit-2026-09-13.md
+  - AI 面试攻略:
       - 总览: knowledge/ai-agent-interview-guide/README.md
       - 00 学习路线图: knowledge/ai-agent-interview-guide/docs/00-学习路线图/README.md
-      - 01 面试八股文: knowledge/ai-agent-interview-guide/docs/01-面试八股文/README.md
-      - 01-01 基础概念: knowledge/ai-agent-interview-guide/docs/01-面试八股文/01-基础概念.md
-      - 01-02 核心框架: knowledge/ai-agent-interview-guide/docs/01-面试八股文/02-核心框架.md
-      - 01-03 RAG 技术: knowledge/ai-agent-interview-guide/docs/01-面试八股文/03-RAG技术.md
-      - 01-04 工具调用: knowledge/ai-agent-interview-guide/docs/01-面试八股文/04-工具调用.md
-      - 01-05 记忆系统: knowledge/ai-agent-interview-guide/docs/01-面试八股文/05-记忆系统.md
-      - 01-06 多智能体: knowledge/ai-agent-interview-guide/docs/01-面试八股文/06-多智能体.md
-      - 01-07 大模型基础: knowledge/ai-agent-interview-guide/docs/01-面试八股文/07-大模型基础.md
-      - 01-08 工程化实践: knowledge/ai-agent-interview-guide/docs/01-面试八股文/08-工程化实践.md
-      - 01-09 Prompt 工程: knowledge/ai-agent-interview-guide/docs/01-面试八股文/09-Prompt工程.md
+      - 01 面试八股文:
+          - 01-00 章节导读: knowledge/ai-agent-interview-guide/docs/01-面试八股文/README.md
+          - 01-01 基础概念: knowledge/ai-agent-interview-guide/docs/01-面试八股文/01-基础概念.md
+          - 01-02 核心框架: knowledge/ai-agent-interview-guide/docs/01-面试八股文/02-核心框架.md
+          - 01-03 RAG 技术: knowledge/ai-agent-interview-guide/docs/01-面试八股文/03-RAG技术.md
+          - 01-04 工具调用: knowledge/ai-agent-interview-guide/docs/01-面试八股文/04-工具调用.md
+          - 01-05 记忆系统: knowledge/ai-agent-interview-guide/docs/01-面试八股文/05-记忆系统.md
+          - 01-06 多智能体: knowledge/ai-agent-interview-guide/docs/01-面试八股文/06-多智能体.md
+          - 01-07 大模型基础: knowledge/ai-agent-interview-guide/docs/01-面试八股文/07-大模型基础.md
+          - 01-08 工程化实践: knowledge/ai-agent-interview-guide/docs/01-面试八股文/08-工程化实践.md
+          - 01-09 Prompt 工程: knowledge/ai-agent-interview-guide/docs/01-面试八股文/09-Prompt工程.md
       - 02 企业招聘分析: knowledge/ai-agent-interview-guide/docs/02-企业招聘分析/README.md
       - 03 开源项目学习笔记: knowledge/ai-agent-interview-guide/docs/03-开源项目学习笔记/README.md
       - 04 简历模板: knowledge/ai-agent-interview-guide/docs/04-简历模板/README.md
       - 05 STAR 面试稿: knowledge/ai-agent-interview-guide/docs/05-STAR面试稿/README.md
       - 06 面试问答集: knowledge/ai-agent-interview-guide/docs/06-面试问答集/README.md
 
-# MkDocs hook：注册保留中文的 slugify。
+# MkDocs hook 1：注册保留中文的 slugify。
 # 不能用 `slugify: !!python/name:docs._slugify.slugify` —— 那要求 PyYAML 在
 # 解析配置时 import 名为 `docs` 的模块，只有「从仓库根运行」时才碰巧成立，
 # CI 上会报 cannot find module 'docs._slugify'。hooks 按路径加载，无此问题。
+# MkDocs hook 2：把「左侧导航折叠开关」注入到 header / head，
+#   避免改 theme 模板（改模板要整体复制 header block，升级易碎）。
 hooks:
   - docs/hooks/slugify_hook.py
+  - docs/hooks/nav_toggle_hook.py
 
 # 渲染扩展：mermaid 图 + 表格 + 目录锚点
 markdown_extensions:
@@ -128,7 +144,8 @@ markdown_extensions:
 # mermaid 图渲染：不走 Material 内置加载器（固定 unpkg CDN，国内不可达），
 # 用 docs/js/mermaid-init.js 走 jsdelivr，且只在有图的页面按需加载。
 extra_javascript:
+  - js/nav-toggle.js
   - js/mermaid-init.js
 extra_css:
   - css/mermaid.css
-  - css/sidebar-section.css
+  - css/theme.css

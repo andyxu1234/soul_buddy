@@ -1,0 +1,742 @@
+/* ============================================================================
+   SoulBuddy 手册 — 主题增强层
+   ----------------------------------------------------------------------------
+   这个文件在 Material 的 main.css / palette.css **之后**加载，职责有三：
+
+     A. 修掉「左侧目录遮挡正文」
+        Material 的默认行为：视口 < 76.25em 时，左侧导航变成 position:fixed
+        的抽屉遮罩（z-index:5），展开时会盖住正文。这里把「常驻栏」的断点
+        下调到 60em，并在 60em 以上把它钉成正常流内的一列，配一个可折叠开关
+        （收起 / 展开），彻底消除遮挡。
+
+     B. 恢复「可点击展开」的多级导航
+        Material 原生就支持折叠（.md-nav__toggle），但旧版
+        docs/css/sidebar-section.css 用 !important 把所有分组强制常开、箭头
+        也隐藏了。这里删掉那套兜底，交还给 Material，并补上缩进导轨与箭头动效。
+
+     C. 视觉打磨
+        配色、层级、间距、表格 / 代码块 / 引用块 / 目录样式统一到一套令牌上。
+
+   断点约定（与 Material 对齐，全部以 em 计，1em = 16px 视口基准）：
+     < 60em        ：手机 / 窄屏，左侧导航仍是抽屉遮罩（原生行为，合理）
+     >= 60em       ：左侧导航变成常驻栏，且带折叠开关
+     >= 76.25em    ：常驻栏 + 正文 + 本页目录 三列
+   ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   1. 设计令牌
+   ------------------------------------------------------------------------ */
+:root {
+  /* 左侧常驻栏宽度。沿用 Material 的 12.1rem：Material 内部有
+     `.md-sidebar__inner { padding-right: calc(100% - 11.5rem) }` 这类
+     与之耦合的算法，改宽度会连带算错，不如不动。 */
+  --sb-nav-w: 12.1rem;
+
+  --sb-radius: 8px;
+  --sb-radius-sm: 6px;
+  --sb-radius-pill: 999px;
+
+  --sb-shadow-1: 0 1px 2px rgba(16, 24, 40, .04), 0 1px 3px rgba(16, 24, 40, .06);
+  --sb-shadow-2: 0 10px 30px rgba(16, 24, 40, .10);
+  --sb-ease: cubic-bezier(.4, 0, .2, 1);
+
+  /* 字体：不走 Google Fonts（国内 fonts.googleapis.com 会超时），改用系统栈。
+     中文优先 PingFang / 微软雅黑 / Noto，西文交给 system-ui。 */
+  --md-text-font-family:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei",
+    "Source Han Sans SC", "Noto Sans CJK SC", "WenQuanYi Micro Hei", sans-serif;
+  --md-code-font-family:
+    "JetBrains Mono", "Cascadia Code", "SF Mono", Menlo, Consolas,
+    "Liberation Mono", "Microsoft YaHei Mono", monospace;
+}
+
+/* --- 浅色 --- */
+body[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #1c3d5a;          /* 深钢蓝：页眉 / 标签栏 */
+  --md-primary-fg-color--light: #2c5578;
+  --md-primary-fg-color--dark: #14293d;
+  --md-primary-bg-color: #ffffff;
+  --md-accent-fg-color: #0f766e;           /* 青碧：悬停 / 强调 */
+  --md-accent-fg-color--transparent: rgba(15, 118, 110, .10);
+  --md-typeset-a-color: #1f5f8b;           /* 链接：比正文可辨、又不刺眼 */
+
+  --sb-ink: #1b2430;
+  --sb-ink-2: #5b6673;
+  --sb-ink-3: #8b95a1;
+  --sb-line: #e4e7ec;
+  --sb-line-soft: #eef1f4;
+  --sb-bg: #ffffff;
+  --sb-bg-soft: #f6f8fa;                   /* 侧栏 / 目录底 */
+  --sb-bg-softer: #fbfcfd;
+  --sb-code-bg: #f7f9fb;
+  --sb-mark: rgba(15, 118, 110, .10);
+  --sb-brand-glow: linear-gradient(90deg, #0f766e 0%, #1f5f8b 45%, #2c5578 100%);
+}
+
+/* --- 深色 --- */
+body[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #14293d;
+  --md-primary-fg-color--light: #1c3d5a;
+  --md-primary-fg-color--dark: #0d1b28;
+  --md-primary-bg-color: #ffffff;
+  --md-accent-fg-color: #4fd1c5;
+  --md-accent-fg-color--transparent: rgba(79, 209, 197, .12);
+  --md-typeset-a-color: #7cc4e8;
+
+  --sb-ink: #d7dde3;
+  --sb-ink-2: #97a2ae;
+  --sb-ink-3: #6c7884;
+  --sb-line: #2a333d;
+  --sb-line-soft: #232b34;
+  --sb-bg: #161b21;
+  --sb-bg-soft: #1a2027;
+  --sb-bg-softer: #171d23;
+  --sb-code-bg: #1b2229;
+  --sb-mark: rgba(79, 209, 197, .14);
+  --sb-brand-glow: linear-gradient(90deg, #4fd1c5 0%, #7cc4e8 50%, #2c5578 100%);
+}
+
+::selection {
+  background: var(--sb-mark);
+  color: inherit;
+}
+
+/* ---------------------------------------------------------------------------
+   2. 页眉与标签栏
+   ------------------------------------------------------------------------ */
+.md-header {
+  background-color: var(--md-primary-fg-color);
+  box-shadow: none;
+}
+
+/* 品牌签名线：页眉下沿 2px 渐变，全站唯一的「记忆点」 */
+.md-header::after {
+  background-image: var(--sb-brand-glow);
+  content: "";
+  display: block;
+  height: 2px;
+  opacity: .9;
+  width: 100%;
+}
+
+.md-header__button.md-logo :is(img, svg) {
+  height: 1.5rem;
+  width: 1.5rem;
+}
+
+.md-header__title {
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+
+/* --- 折叠开关（由 docs/hooks/nav_toggle_hook.py 注入） --- */
+.sb-nav-toggle {
+  align-items: center;
+  border-radius: var(--sb-radius-sm);
+  display: inline-flex;
+  justify-content: center;
+  transition: background-color 150ms var(--sb-ease);
+}
+
+.sb-nav-toggle:hover {
+  background-color: rgba(255, 255, 255, .14);
+}
+
+.sb-nav-toggle .sb-nav-toggle__state {
+  display: none;
+}
+
+/* 收起态：图标镜像一下，表示「可向右展开」 */
+.sb-nav-toggle svg {
+  transform: rotate(0deg);
+  transition: transform 220ms var(--sb-ease);
+}
+
+html.sb-nav-collapsed .sb-nav-toggle svg {
+  transform: scaleX(-1);
+}
+
+/* 窄屏 / 手机：抽屉是原生行为，折叠开关让位给原生汉堡按钮 */
+@media screen and (max-width: 59.984375em) {
+  .sb-nav-toggle {
+    display: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   3. 左侧导航：常驻栏（不再遮罩正文）+ 可折叠
+   ------------------------------------------------------------------------ */
+@media screen and (min-width: 60em) {
+  /* 3.1 从「固定抽屉遮罩」改回「流内常驻栏」 */
+  .md-sidebar--primary {
+    background-color: transparent;
+    box-shadow: none;
+    /* 抽屉模式下 Material 靠 left/transform 把它推出屏幕，这里全部复位，
+       否则 position:sticky 的偏移会被 left 带歪 */
+    bottom: auto;
+    height: calc(100vh - 2.4rem);
+    left: auto;
+    margin: 0;
+    overflow: hidden;              /* 宽度收拢时裁掉内部内容，不产生横向滚动 */
+    padding: 0;
+    position: sticky;
+    right: auto;
+    top: 2.4rem;
+    transform: none;
+    transition:
+      width 300ms var(--sb-ease),
+      opacity 200ms var(--sb-ease);
+    width: var(--sb-nav-w);
+    will-change: width;
+    z-index: auto;
+  }
+
+  /* 3.1b 把 Material 的「桌面式导航」断点从 76.25em 下调到 60em。
+     ----------------------------------------------------------------------
+     Material 把整套桌面导航（就地折叠展开、隐藏下钻标题、箭头旋转）
+     锁在 `@media (min-width:76.25em)`，低于它的那一大段
+     `@media (max-width:76.234375em)` 是**抽屉模式**：
+       .md-nav--primary .md-nav { position:absolute; left:0; right:0; top:0;
+                                  height:100%; background:bg; }
+       .md-nav__toggle ~ .md-nav { display:flex; transform:translateX(100%) }
+     也就是「侧栏换成一整块全屏面板、点父级=整屏切换 + 返回标题」。
+     在 1080px 这类窗口（正是 60–76.25em 区间）里，把这套抽屉样式塞进
+     一个 12rem 宽的常驻栏会很难看。
+     所以这里把桌面版的关键几条重新声明一遍，让 60em 以上行为完全一致。
+     （数值与 Material 自身 min-width:76.25em 那一段保持相同。） */
+  .md-nav--primary,
+  .md-nav--primary .md-nav {
+    background-color: transparent;
+    display: block;
+    height: auto;
+    left: auto;
+    position: static;
+    right: auto;
+    top: auto;
+    z-index: auto;
+  }
+
+  /* 折叠：从「横向平移下钻」改成「纵向就地展开」 */
+  .md-nav__toggle ~ .md-nav {
+    display: grid;
+    grid-template-rows: minmax(.4rem, 0fr);
+    opacity: 0;
+    transform: none;
+    transition:
+      grid-template-rows 250ms cubic-bezier(.86, 0, .07, 1),
+      opacity 250ms,
+      visibility 0ms 250ms;
+    visibility: collapse;
+  }
+
+  .md-nav__toggle:checked ~ .md-nav,
+  .md-nav__toggle.md-toggle--indeterminate ~ .md-nav {
+    grid-template-rows: minmax(.4rem, 1fr);
+    opacity: 1;
+    transform: none;
+    transition:
+      grid-template-rows 250ms cubic-bezier(.86, 0, .07, 1),
+      opacity 150ms 100ms,
+      visibility 0ms;
+    visibility: visible;
+  }
+
+  .md-nav__toggle ~ .md-nav > .md-nav__list {
+    overflow: hidden;
+  }
+
+  /* 下钻用的「返回标题」在就地展开模式下没有意义 */
+  .md-nav__item--nested > .md-nav > .md-nav__title {
+    display: none;
+  }
+
+  /* 抽屉模式会给每个 nav__list 顶部加一条 inset 亮线；折叠时 0.4rem 的
+     最小高度会把这根线露出来，于是每个折叠分组下面都多出一道 0.5px 横线，
+     像表格一样脏。这里去掉亮线，只留那 0.4rem 的间隙当行距。 */
+  .md-nav--primary .md-nav__title ~ .md-nav__list {
+    box-shadow: none;
+  }
+
+  /* 抽屉版的分割线 / 大内边距 / 放大字号都不要 */
+  .md-nav--primary .md-nav__item {
+    border-top: 0;
+    font-size: .7rem;
+    line-height: 1.5;
+  }
+
+  .md-nav--primary .md-nav__link {
+    padding: .3em .5em;
+  }
+
+  .md-nav--primary .md-nav__list > .md-nav__item > .md-nav__link {
+    margin-right: .4rem;
+  }
+
+  /* 箭头：桌面版是统一尺寸的圆点 + 展开时旋转 90° */
+  .md-nav--primary .md-nav__link .md-nav__icon {
+    font-size: .9rem;
+    height: .9rem;
+    width: .9rem;
+  }
+
+  .md-nav--primary .md-nav__link .md-nav__icon:after {
+    -webkit-mask-image: var(--md-nav-icon--next);
+    mask-image: var(--md-nav-icon--next);
+  }
+
+  .md-nav--primary .md-nav__item--nested .md-nav__toggle:checked
+    ~ .md-nav__link .md-nav__icon:after,
+  .md-nav--primary .md-nav__item--nested .md-toggle--indeterminate
+    ~ .md-nav__link .md-nav__icon:after {
+    transform: rotate(90deg);
+  }
+
+  /* 抽屉 checkbox 在 >=60em 已经没有意义，压掉它可能带来的位移 */
+  [data-md-toggle="drawer"]:checked ~ .md-container .md-sidebar--primary {
+    box-shadow: none;
+    transform: none;
+  }
+
+  /* 3.2 真正的滚动容器：要给确定高度。父级是 overflow:hidden，
+     内层若 height:auto 会被直接裁掉而不产生滚动条。 */
+  .md-sidebar--primary .md-sidebar__scrollwrap {
+    border-right: 1px solid var(--sb-line-soft);
+    height: 100%;
+    margin: 0;
+    max-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: .5rem .5rem 1.6rem .7rem;
+    position: static;
+    scrollbar-color: var(--sb-line) transparent;
+    scrollbar-width: thin;
+    /* 宽度钉死，避免折叠动画过程中文字被压缩而抖动 */
+    width: var(--sb-nav-w);
+  }
+
+  .md-sidebar--primary .md-sidebar__scrollwrap::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .md-sidebar--primary .md-sidebar__scrollwrap::-webkit-scrollbar-thumb {
+    background-color: var(--sb-line);
+    border-radius: 4px;
+  }
+
+  .md-sidebar--primary .md-sidebar__scrollwrap::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* 3.3 收起态：宽度归零，正文顺势左移填满 */
+  html.sb-nav-collapsed .md-sidebar--primary {
+    opacity: 0;
+    pointer-events: none;
+    width: 0;
+  }
+
+  /* Material 自己的汉堡按钮在这个断点已经没有侧栏可开（导航已是常驻栏），
+     隐藏它，位置让给上面的折叠开关，避免出现两个图标。 */
+  label.md-header__button[for="__drawer"] {
+    display: none;
+  }
+}
+
+/* 3.4 导航本体的层级与可读性 */
+/* 只隐藏**根级**标题色块（那块「站点名 + 图标」在常驻栏里是多余的）。
+   注意不能用 `.md-nav--primary .md-nav__title`：下钻到嵌套分组后，
+   Material 会给下一级加一个带「返回」箭头的标题，那是唯一的返回入口，
+   一并隐藏会把用户困在子层级里。 */
+.md-nav--primary > .md-nav__title {
+  display: none;
+}
+
+@media screen and (max-width: 59.984375em) {
+  /* 抽屉里要留着标题块，否则手机端没有返回入口 */
+  .md-nav--primary > .md-nav__title {
+    display: block;
+  }
+}
+
+.md-nav__link {
+  border-radius: var(--sb-radius-sm);
+  transition: background-color 130ms var(--sb-ease), color 130ms var(--sb-ease);
+}
+
+/* 一级条目（当前标签页下的目录项）稍微重一点 */
+.md-nav--primary > .md-nav__list > .md-nav__item > .md-nav__link {
+  font-size: .72rem;
+  padding-bottom: .36em;
+  padding-top: .36em;
+}
+
+/* 二级及以下：小一号、淡一点 */
+.md-nav--primary .md-nav .md-nav__link {
+  color: var(--sb-ink-2);
+  font-size: .68rem;
+}
+
+.md-nav--primary .md-nav .md-nav__link:hover {
+  color: var(--sb-ink);
+}
+
+/* 折叠父级（可点击展开 / 收起） */
+.md-nav--primary .md-nav__item--nested > .md-nav__link {
+  align-items: center;
+  color: var(--sb-ink);
+  cursor: pointer;
+  display: flex;
+  font-weight: 600;
+}
+
+.md-nav--primary .md-nav__item--nested > .md-nav__link .md-nav__icon {
+  color: var(--sb-ink-3);
+  height: .8rem;
+  margin-left: auto;
+  opacity: .9;
+  transition: color 150ms var(--sb-ease);
+  width: .8rem;
+}
+
+.md-nav--primary .md-nav__item--nested > .md-nav__link:hover .md-nav__icon {
+  color: var(--md-accent-fg-color);
+}
+
+/* 缩进导轨：展开后的子项挂在一条细竖线右侧，层级一眼可辨 */
+.md-nav--primary .md-nav__item--nested > .md-nav > .md-nav__list {
+  border-left: 1px solid var(--sb-line);
+  margin-left: .42rem;
+  padding-left: .3rem;
+}
+
+/* 当前页高亮 */
+.md-nav--primary .md-nav__link--active,
+.md-nav--primary .md-nav__item--active > .md-nav__link {
+  color: var(--md-accent-fg-color) !important;
+  font-weight: 600;
+}
+
+.md-nav--primary .md-nav__item--active > .md-nav__link {
+  background-color: var(--md-accent-fg-color--transparent);
+}
+
+/* 焦点可见性（无障碍） */
+.md-nav__link:focus-visible,
+.sb-nav-toggle:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   4. 右侧「本页目录」
+   ------------------------------------------------------------------------ */
+@media screen and (min-width: 60em) {
+  .md-nav--secondary > .md-nav__title {
+    /* 正文里常有一个「目录」标题，导航标题同字重复，直接隐去 */
+    display: none;
+  }
+
+  .md-sidebar--secondary .md-sidebar__scrollwrap {
+    scrollbar-color: var(--sb-line) transparent;
+    scrollbar-width: thin;
+  }
+
+  .md-sidebar--secondary .md-sidebar__scrollwrap::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .md-sidebar--secondary .md-sidebar__scrollwrap::-webkit-scrollbar-thumb {
+    background-color: var(--sb-line);
+    border-radius: 4px;
+  }
+}
+
+.md-nav--secondary {
+  border-left: 1px solid var(--sb-line);
+}
+
+.md-nav--secondary .md-nav__link {
+  color: var(--sb-ink-2);
+  font-size: .68rem;
+  line-height: 1.45;
+  padding-bottom: .22em;
+  padding-top: .22em;
+}
+
+.md-nav--secondary .md-nav__link:hover {
+  color: var(--sb-ink);
+}
+
+.md-nav--secondary .md-nav__link--active {
+  color: var(--md-accent-fg-color) !important;
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------------
+   5. 正文排版
+   ------------------------------------------------------------------------ */
+@media screen and (min-width: 76.25em) {
+  /* Material 默认整页只有 61rem，宽屏下正文被挤在一条细栏里。
+     适度放宽，给阅读区更多呼吸空间。 */
+  .md-grid {
+    max-width: 74rem;
+  }
+}
+
+.md-content__inner {
+  padding-bottom: 2.4rem;
+}
+
+.md-typeset {
+  line-height: 1.75;
+}
+
+/* 标题 */
+.md-typeset h1 {
+  color: var(--sb-ink);
+  font-size: 1.9em;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  line-height: 1.3;
+  margin: 0 0 1.1em;
+}
+
+.md-typeset h2 {
+  border-bottom: 1px solid var(--sb-line);
+  color: var(--sb-ink);
+  font-size: 1.45em;
+  font-weight: 600;
+  letter-spacing: -.005em;
+  padding-bottom: .3em;
+}
+
+.md-typeset h3 {
+  color: var(--sb-ink);
+  font-size: 1.15em;
+  font-weight: 600;
+}
+
+.md-typeset h4,
+.md-typeset h5,
+.md-typeset h6 {
+  color: var(--sb-ink);
+  font-weight: 600;
+}
+
+/* 锚点符号：默认太抢眼，改成悬停才明显 */
+.md-typeset .headerlink {
+  color: var(--sb-ink-3);
+  opacity: 0;
+  transition: opacity 130ms var(--sb-ease), color 130ms var(--sb-ease);
+}
+
+.md-typeset :is(h1, h2, h3, h4, h5, h6):hover > .headerlink,
+.md-typeset .headerlink:focus {
+  opacity: .7;
+}
+
+.md-typeset .headerlink:hover {
+  color: var(--md-accent-fg-color);
+  opacity: 1;
+}
+
+/* 链接：悬停出现下划线，比单纯变色更明确 */
+.md-typeset a {
+  text-decoration: none;
+  text-underline-offset: .18em;
+  transition: color 130ms var(--sb-ease);
+}
+
+.md-typeset a:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+}
+
+.md-typeset p,
+.md-typeset li {
+  letter-spacing: .002em;
+}
+
+.md-typeset p {
+  margin: 1em 0;
+}
+
+.md-typeset li > ul,
+.md-typeset li > ol {
+  margin-top: .35em;
+}
+
+/* 行内代码 */
+.md-typeset code {
+  background-color: var(--sb-code-bg);
+  border: 1px solid var(--sb-line-soft);
+  border-radius: var(--sb-radius-sm);
+  padding: .08em .34em;
+  word-break: break-word;
+}
+
+.md-typeset a > code,
+.md-typeset a:hover > code {
+  border-color: transparent;
+}
+
+/* 代码块 */
+.md-typeset pre > code,
+.md-typeset .highlight code {
+  background-color: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+
+.md-typeset .highlight,
+.md-typeset pre {
+  border-radius: var(--sb-radius);
+}
+
+.md-typeset .highlight {
+  background-color: var(--sb-code-bg);
+  border: 1px solid var(--sb-line-soft);
+  overflow: hidden;
+}
+
+.md-typeset .highlight > pre {
+  margin: 0;
+}
+
+.md-typeset .highlighttable {
+  border-radius: var(--sb-radius);
+  overflow: hidden;
+}
+
+.md-typeset .md-clipboard {
+  color: var(--sb-ink-3);
+  transition: color 130ms var(--sb-ease);
+}
+
+.md-typeset .md-clipboard:hover {
+  color: var(--md-accent-fg-color);
+}
+
+/* 引用块 */
+.md-typeset blockquote {
+  background-color: var(--sb-bg-soft);
+  border-left: 3px solid var(--md-accent-fg-color);
+  border-radius: 0 var(--sb-radius) var(--sb-radius) 0;
+  color: var(--sb-ink-2);
+  padding: .7em 1.1em;
+}
+
+/* 表格：圆角 + 表头底色 + 悬停行高亮 */
+.md-typeset table:not([class]) {
+  border: 1px solid var(--sb-line);
+  border-radius: var(--sb-radius);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.md-typeset table:not([class]) th {
+  background-color: var(--sb-bg-soft);
+  border-bottom: 1px solid var(--sb-line);
+  color: var(--sb-ink);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.md-typeset table:not([class]) td {
+  border-top: 1px solid var(--sb-line-soft);
+}
+
+.md-typeset table:not([class]) tr:hover {
+  background-color: var(--sb-bg-softer);
+}
+
+/* 提示块（admonition） */
+.md-typeset .admonition,
+.md-typeset details {
+  border-left-width: 3px;
+  border-radius: var(--sb-radius);
+  border-width: 1px;
+  box-shadow: none;
+  font-size: .68rem;
+}
+
+.md-typeset .admonition-title,
+.md-typeset summary {
+  border-radius: 0;
+  font-weight: 600;
+}
+
+/* 分隔线 / 图片 / 键盘按键 */
+.md-typeset hr {
+  border-bottom: 1px solid var(--sb-line);
+  margin: 1.8em 0;
+}
+
+/* Material 不约束正文图片宽度，窄屏上大图会把页面撑出横向滚动 */
+.md-typeset img {
+  border-radius: var(--sb-radius-sm);
+  height: auto;
+  max-width: 100%;
+}
+
+.md-typeset kbd {
+  border-radius: var(--sb-radius-sm);
+  box-shadow: 0 1px 0 var(--sb-line);
+}
+
+/* ---------------------------------------------------------------------------
+   6. 目录按钮 / 页脚 / 其他
+   ------------------------------------------------------------------------ */
+.md-top {
+  border-radius: var(--sb-radius-pill);
+  box-shadow: var(--sb-shadow-2);
+  font-size: .64rem;
+}
+
+.md-footer {
+  background-color: var(--sb-bg-soft);
+  border-top: 1px solid var(--sb-line);
+  color: var(--sb-ink-2);
+}
+
+.md-footer-meta {
+  background-color: transparent;
+}
+
+.md-copyright {
+  color: var(--sb-ink-3);
+  font-size: .6rem;
+}
+
+.md-copyright__highlight {
+  color: var(--sb-ink-2);
+}
+
+.md-social__link {
+  color: var(--sb-ink-3);
+}
+
+.md-social__link:hover {
+  color: var(--md-accent-fg-color);
+}
+
+.md-search__form {
+  border-radius: var(--sb-radius-pill);
+}
+
+/* 尊重系统的「减少动效」设置 */
+@media (prefers-reduced-motion: reduce) {
+  .md-sidebar--primary,
+  .sb-nav-toggle svg {
+    transition: none !important;
+  }
+}
+
+/* 打印：折叠开关不要出现 */
+@media print {
+  .sb-nav-toggle {
+    display: none;
+  }
+}
