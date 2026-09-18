@@ -34,9 +34,14 @@ site/
 
 # IDE / local runtime state
 .idea/
+.vscode/
+.run/
 .trae/
 .workbuddy/
 .soul_sandbox_home/
 build/mermaid.min.js
 .zcode/
 .claude/
+
+# Throwaway debug / verification scripts (keep ad-hoc scratch out of the repo)
+script/_tmp_*.py

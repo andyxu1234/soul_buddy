@@ -12,6 +12,7 @@ site_dir: site
 # 排除生成脚本，不进入站点输出
 exclude_docs: |
   _gen_*.py
+  _slugify.py
 
 theme:
   name: material
@@ -83,6 +84,26 @@ nav:
   - 测试分析: test-analysis.md
   - 测试用例: test-cases.md
   - 安全与质量审计 2026-09-13: security-audit-2026-09-13.md
+  # ── 知识库：AI Agent 面试攻略（docs/knowledge/ai-agent-interview-guide/）
+  #    顶层为「页面」，才能渲染成顶部 tab；子项在侧栏直接列出。
+  - AI Agent 面试攻略:
+      - 总览: knowledge/ai-agent-interview-guide/README.md
+      - 00 学习路线图: knowledge/ai-agent-interview-guide/docs/00-学习路线图/README.md
+      - 01 面试八股文: knowledge/ai-agent-interview-guide/docs/01-面试八股文/README.md
+      - 01-01 基础概念: knowledge/ai-agent-interview-guide/docs/01-面试八股文/01-基础概念.md
+      - 01-02 核心框架: knowledge/ai-agent-interview-guide/docs/01-面试八股文/02-核心框架.md
+      - 01-03 RAG 技术: knowledge/ai-agent-interview-guide/docs/01-面试八股文/03-RAG技术.md
+      - 01-04 工具调用: knowledge/ai-agent-interview-guide/docs/01-面试八股文/04-工具调用.md
+      - 01-05 记忆系统: knowledge/ai-agent-interview-guide/docs/01-面试八股文/05-记忆系统.md
+      - 01-06 多智能体: knowledge/ai-agent-interview-guide/docs/01-面试八股文/06-多智能体.md
+      - 01-07 大模型基础: knowledge/ai-agent-interview-guide/docs/01-面试八股文/07-大模型基础.md
+      - 01-08 工程化实践: knowledge/ai-agent-interview-guide/docs/01-面试八股文/08-工程化实践.md
+      - 01-09 Prompt 工程: knowledge/ai-agent-interview-guide/docs/01-面试八股文/09-Prompt工程.md
+      - 02 企业招聘分析: knowledge/ai-agent-interview-guide/docs/02-企业招聘分析/README.md
+      - 03 开源项目学习笔记: knowledge/ai-agent-interview-guide/docs/03-开源项目学习笔记/README.md
+      - 04 简历模板: knowledge/ai-agent-interview-guide/docs/04-简历模板/README.md
+      - 05 STAR 面试稿: knowledge/ai-agent-interview-guide/docs/05-STAR面试稿/README.md
+      - 06 面试问答集: knowledge/ai-agent-interview-guide/docs/06-面试问答集/README.md
 
 # 渲染扩展：mermaid 图 + 表格 + 目录锚点
 markdown_extensions:
@@ -90,6 +111,10 @@ markdown_extensions:
   - tables
   - toc:
       permalink: true
+      # 默认 slugify 会丢掉中文（「1. 什么是 AI Agent」-> `1-ai-agent`），
+      # 导致 knowledge/ 下各文手写的目录锚点全部失效。改用保留 CJK 的实现。
+      slugify: !!python/name:docs._slugify.slugify
+      separator: "-"
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
