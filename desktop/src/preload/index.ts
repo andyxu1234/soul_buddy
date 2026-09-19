@@ -61,8 +61,15 @@ const api = {
     request('POST', `/api/v1/runs/${sessionId}/abort`),
   getHistory: (sessionId: string) =>
     request('GET', `/api/v1/sessions/${sessionId}/history`),
-  startRun: (sessionId: string, prompt: string) =>
-    request('POST', '/api/v1/runs', { session_id: sessionId, prompt }),
+  startRun: (sessionId: string, prompt: string,
+             images?: Array<{ filename: string; mime: string; data: string }>,
+             files?: Array<{ filename: string; mime: string; data: string }>) =>
+    request('POST', '/api/v1/runs', {
+      session_id: sessionId,
+      prompt,
+      ...(images && images.length ? { images } : {}),
+      ...(files && files.length ? { files } : {}),
+    }),
   resolvePermission: (sessionId: string, callId: string, choice: string) =>
     request('POST', `/api/v1/sessions/${sessionId}/permissions/${callId}`, { choice }),
   listRules: () => request('GET', '/api/v1/permissions/rules'),
@@ -143,4 +150,7 @@ const native = {
     ipcRenderer.invoke('soul:open-path', p),
 }
 
-contextBridge.exposeInMainWorld('soul', { api, native })
+// bridgeVersion: renderer 用来识别桥能力的显式版本号（比函数形参个数可靠，
+// 可选参数不计入 Function.length）。
+//   1 = 基础 API；2 = startRun 支持 images / files 附件
+contextBridge.exposeInMainWorld('soul', { api, native, bridgeVersion: 2 })

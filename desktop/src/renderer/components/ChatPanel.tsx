@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useRef, useState } from 'react'
-import type { SessionRecord, PermissionRequest, ContextUsage } from '../types'
+import type { SessionRecord, PermissionRequest, ContextUsage, ImageAttachment, FileAttachment } from '../types'
 import { MessageList } from './MessageList'
 import { PermissionDialog } from './PermissionDialog'
 
@@ -34,7 +34,8 @@ interface Props {
   providers: ProviderOption[]
   contextUsage: ContextUsage | null
   onPromptChange: (v: string) => void
-  onSend: () => void
+  /** 发送（可携带输入框里的图片/文件附件） */
+  onSend: (images: ImageAttachment[], files: FileAttachment[]) => void
   onAbort: () => void
   onResolvePerm: (req: PermissionRequest, choice: string) => void
   onToggleRightPanel: () => void
@@ -48,7 +49,13 @@ interface Props {
   mode?: AgentMode
   onModeChange?: (mode: AgentMode) => void
   /** 空状态下用户从居中 composer 发起新会话 */
-  onStartNewSession: (prompt: string, workspaceRoot: string) => void
+  onStartNewSession: (prompt: string, workspaceRoot: string, images?: ImageAttachment[], files?: FileAttachment[]) => void
+  /** 主 composer 的待发送图片（状态提升到 App，便于发送失败时还原） */
+  pendingImages?: ImageAttachment[]
+  onPendingImagesChange?: (imgs: ImageAttachment[]) => void
+  /** 主 composer 的待发送文件（发送失败时还原） */
+  pendingFiles?: FileAttachment[]
+  onPendingFilesChange?: (fs: FileAttachment[]) => void
   /** 导航到 Skills / MCP / Expert 面板 */
   onNavigate?: (view: 'skills' | 'mcp' | 'expert') => void
 }
@@ -64,6 +71,73 @@ function autoGrow(el: HTMLTextAreaElement) {
   el.style.height = Math.min(el.scrollHeight, 180) + 'px'
 }
 
+// --- 聊天附件 -------------------------------------------------------------
+const MAX_ATTACH_IMAGES = 5
+const MAX_ATTACH_MB = 8
+const MAX_ATTACH_FILES = 5
+const MAX_FILE_MB = 8
+
+async function fileToAttachment(f: File): Promise<ImageAttachment> {
+  const base64 = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result).split(',')[1] ?? '')
+    r.onerror = () => reject(r.error)
+    r.readAsDataURL(f)
+  })
+  return {
+    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    name: f.name || 'image.png',
+    mime: f.type || 'image/png',
+    size: f.size,
+    base64,
+    previewUrl: URL.createObjectURL(f),
+  }
+}
+
+/** 文件附件只持句柄，不读内容（发送时才解析，同 ZCode/WorkBuddy）。 */
+function fileToFileAttachment(f: File): FileAttachment {
+  return {
+    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    name: f.name || 'file',
+    mime: f.type || 'application/octet-stream',
+    size: f.size,
+    file: f,
+  }
+}
+
+/** 输入框上方的附件 chip 行：图片缩略图 + 文件名 chip，均带移除按钮。 */
+function AttachmentRow({ images, files, onRemoveImage, onRemoveFile }: {
+  images: ImageAttachment[]
+  files: FileAttachment[]
+  onRemoveImage: (id: string) => void
+  onRemoveFile: (id: string) => void
+}) {
+  if (!images.length && !files.length) return null
+  return (
+    <div className="attach-row">
+      {images.map((im) => (
+        <div className="attach-chip" key={im.id} title={`${im.name} · ${Math.max(1, Math.round(im.size / 1024))}KB`}>
+          <img src={im.previewUrl} alt={im.name} />
+          <span className="attach-name">{im.name}</span>
+          <button className="attach-remove" onClick={() => onRemoveImage(im.id)} title="移除图片">
+            <Icon name="x" size={11} strokeWidth={2.4} />
+          </button>
+        </div>
+      ))}
+      {files.map((f) => (
+        <div className="attach-chip is-file" key={f.id} title={`${f.name} · ${Math.max(1, Math.round(f.size / 1024))}KB`}>
+          <span className="attach-file-icon"><Icon name="file" size={13} /></span>
+          <span className="attach-name">{f.name}</span>
+          <span className="attach-file-size">{Math.max(1, Math.round(f.size / 1024))}KB</span>
+          <button className="attach-remove" onClick={() => onRemoveFile(f.id)} title="移除文件">
+            <Icon name="x" size={11} strokeWidth={2.4} />
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function ChatPanel({
   session, events, running, runStart, prompt, perms, streamText, streamReasoning,
   rightPanelOpen, permMode, providers, contextUsage,
@@ -72,6 +146,8 @@ export function ChatPanel({
   onPermModeChange, onProviderChange, onExpertChange, onToast,
   onStartNewSession, onNavigate,
   mode, onModeChange,
+  pendingImages = [], onPendingImagesChange,
+  pendingFiles = [], onPendingFilesChange,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
@@ -114,7 +190,64 @@ export function ChatPanel({
   // 空状态（无 session）的本地状态：独立 composer，不污染主 composer
   const [emptyPrompt, setEmptyPrompt] = useState('')
   const [emptyWorkspace, setEmptyWorkspace] = useState<string>('')
+  const [emptyImages, setEmptyImages] = useState<ImageAttachment[]>([])
+  const [emptyFiles, setEmptyFiles] = useState<FileAttachment[]>([])
   const [startingNew, setStartingNew] = useState(false)
+
+  /** 把新选/粘贴的图片并入附件列表（限额校验）。两个 composer 共用。 */
+  const attachFiles = (files: File[], current: ImageAttachment[],
+                       replace: (imgs: ImageAttachment[]) => void) => {
+    const imgs = files.filter((f) => f.type.startsWith('image/'))
+    if (!imgs.length) return
+    const room = MAX_ATTACH_IMAGES - current.length
+    if (room <= 0) {
+      onToast(`一次最多附带 ${MAX_ATTACH_IMAGES} 张图片`, 'err')
+      return
+    }
+    const inSize = imgs.filter((f) => f.size <= MAX_ATTACH_MB * 1024 * 1024)
+    const accepted = inSize.slice(0, room)
+    if (imgs.length > inSize.length) {
+      onToast(`有图片超过 ${MAX_ATTACH_MB}MB，已跳过`, 'err')
+    }
+    if (imgs.length > room) {
+      onToast(`一次最多附带 ${MAX_ATTACH_IMAGES} 张图片，已截取前 ${MAX_ATTACH_IMAGES} 张`, 'info')
+    }
+    if (!accepted.length) return
+    Promise.all(accepted.map(fileToAttachment))
+      .then((atts) => replace([...current, ...atts]))
+      .catch(() => onToast('图片读取失败', 'err'))
+  }
+
+  /** 把新选的普通文件并入文件附件列表（限额校验）。不读内容。 */
+  const attachLocalFiles = (files: File[], current: FileAttachment[],
+                            replace: (fs: FileAttachment[]) => void) => {
+    if (!files.length) return
+    const room = MAX_ATTACH_FILES - current.length
+    if (room <= 0) {
+      onToast(`一次最多附带 ${MAX_ATTACH_FILES} 个文件`, 'err')
+      return
+    }
+    const inSize = files.filter((f) => f.size <= MAX_FILE_MB * 1024 * 1024)
+    const accepted = inSize.slice(0, room).map(fileToFileAttachment)
+    if (files.length > inSize.length) {
+      onToast(`有文件超过 ${MAX_FILE_MB}MB，已跳过`, 'err')
+    }
+    if (files.length > room) {
+      onToast(`一次最多附带 ${MAX_ATTACH_FILES} 个文件，已截取前 ${MAX_ATTACH_FILES} 个`, 'info')
+    }
+    if (accepted.length) replace([...current, ...accepted])
+  }
+
+  /** 粘贴截图/图片文件到输入框。 */
+  const onPasteImages = (e: React.ClipboardEvent, current: ImageAttachment[],
+                         replace: (imgs: ImageAttachment[]) => void) => {
+    const files = Array.from(e.clipboardData?.files || [])
+      .filter((f) => f.type.startsWith('image/'))
+    if (files.length) {
+      e.preventDefault()
+      attachFiles(files, current, replace)
+    }
+  }
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -189,31 +322,6 @@ export function ChatPanel({
     })
   }
 
-  const handleInsertLocalFile = (filename: string, content: string) => {
-    const ta = textareaRef.current || emptyTextareaRef.current
-    const isEmpty = ta === emptyTextareaRef.current
-    const currentText = isEmpty ? emptyPrompt : prompt
-    const setText = isEmpty ? setEmptyPrompt : onPromptChange
-
-    const start = ta?.selectionStart ?? currentText.length
-    const end = ta?.selectionEnd ?? currentText.length
-    const before = currentText.slice(0, start)
-    const after = currentText.slice(end)
-    const insertion = before.endsWith(' ') || before.length === 0 ? `` : ` `
-    // 截断过长文件(>20KB),保留头尾
-    const MAX_LOCAL = 20_000
-    const trimmed = content.length > MAX_LOCAL
-      ? content.slice(0, MAX_LOCAL) + `\n... [truncated, 原大小 ${content.length} 字符]`
-      : content
-    const token = `\`\`\`${filename}\n${trimmed}\n\`\`\``
-    const newText = `${before}${insertion}${token}${after}`
-    setText(newText)
-    requestAnimationFrame(() => {
-      ta?.focus()
-      ta?.setSelectionRange(start + insertion.length + token.length, start + insertion.length + token.length)
-    })
-  }
-
   const handlePickWorkspace = async () => {
     try {
       const dir = await native.pickDirectory()
@@ -227,11 +335,13 @@ export function ChatPanel({
   }
 
   const handleEmptySend = () => {
-    if (!emptyPrompt.trim() || startingNew) return
+    if ((!emptyPrompt.trim() && emptyImages.length === 0 && emptyFiles.length === 0) || startingNew) return
     setStartingNew(true)
     try {
-      onStartNewSession(emptyPrompt.trim(), emptyWorkspace)
+      onStartNewSession(emptyPrompt.trim(), emptyWorkspace, emptyImages, emptyFiles)
       setEmptyPrompt('')
+      setEmptyImages([])
+      setEmptyFiles([])
     } finally {
       // 真正的 reset 等切换到 session 后自然消失
       setTimeout(() => setStartingNew(false), 800)
@@ -279,11 +389,17 @@ export function ChatPanel({
 
             <div className="empty-composer">
               <div className="composer-box">
+                <AttachmentRow
+                  images={emptyImages}
+                  files={emptyFiles}
+                  onRemoveImage={(id) => setEmptyImages((p) => p.filter((i) => i.id !== id))}
+                  onRemoveFile={(id) => setEmptyFiles((p) => p.filter((i) => i.id !== id))}
+                />
                 <textarea
                   ref={emptyTextareaRef}
                   className="composer-textarea"
                   value={emptyPrompt}
-                  placeholder="描述一个任务…  @ 引用文件，/ 调用 Skills"
+                  placeholder="描述一个任务…  @ 引用文件，/ 调用 Skills，可粘贴截图"
                   onChange={(e) => setEmptyPrompt(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey && !startingNew) {
@@ -291,12 +407,13 @@ export function ChatPanel({
                       handleEmptySend()
                     }
                   }}
+                  onPaste={(e) => onPasteImages(e, emptyImages, setEmptyImages)}
                   rows={1}
                   autoFocus
                 />
                 <div className="composer-bar">
                   <div className="cb-left">
-                    <PlusMenu onInsertSkill={handleInsertSkill} onInsertFile={handleInsertFile} onInsertLocalFile={handleInsertLocalFile} onToast={onToast} workspaceRoot={session?.workspace_root} onExpertPick={onExpertChange} currentExpertId={session?.expert_id} currentMode={mode} onModeChange={onModeChange} />
+                    <PlusMenu onInsertSkill={handleInsertSkill} onInsertFile={handleInsertFile} onPickFiles={(fs) => attachLocalFiles(fs, emptyFiles, setEmptyFiles)} onPickImages={(fs) => attachFiles(fs, emptyImages, setEmptyImages)} onToast={onToast} workspaceRoot={session?.workspace_root} onExpertPick={onExpertChange} currentExpertId={session?.expert_id} currentMode={mode} onModeChange={onModeChange} />
                     <PermissionDropdown mode={permMode} onChange={onPermModeChange} />
                     <ExpertSelector
                       current={null}
@@ -318,7 +435,7 @@ export function ChatPanel({
                         <button
                           className="send-btn"
                           onClick={handleEmptySend}
-                          disabled={!emptyPrompt.trim()}
+                          disabled={!emptyPrompt.trim() && emptyImages.length === 0 && emptyFiles.length === 0}
                           title="发送 (Enter)"
                         >
                           <Icon name="send" size={34} strokeWidth={2.4} />
@@ -382,6 +499,7 @@ export function ChatPanel({
           <>
             <MessageList
               events={events}
+              sessionId={session?.id}
               onOpenArtifacts={onOpenArtifacts}
               onOpenChanges={onOpenChanges}
               onEditUser={onPromptChange}
@@ -429,6 +547,12 @@ export function ChatPanel({
       {session && (
         <div className="composer">
         <div className="composer-box">
+          <AttachmentRow
+            images={pendingImages}
+            files={pendingFiles}
+            onRemoveImage={(id) => onPendingImagesChange?.(pendingImages.filter((i) => i.id !== id))}
+            onRemoveFile={(id) => onPendingFilesChange?.(pendingFiles.filter((i) => i.id !== id))}
+          />
           <textarea
             ref={textareaRef}
             className="composer-textarea"
@@ -436,21 +560,22 @@ export function ChatPanel({
             placeholder={
               !session ? '先选择一个任务'
                 : running ? 'Agent 正在运行，可点击右侧停止按钮中断'
-                  : '描述一个任务…  @ 引用文件，/ 调用 Skills'
+                  : '描述一个任务…  @ 引用文件，/ 调用 Skills，可粘贴截图'
             }
             disabled={!session}
             onChange={(e) => onPromptChange(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey && !running) {
                 e.preventDefault()
-                onSend()
+                onSend(pendingImages, pendingFiles)
               }
             }}
+            onPaste={(e) => onPasteImages(e, pendingImages, onPendingImagesChange || (() => {}))}
             rows={1}
           />
           <div className="composer-bar">
             <div className="cb-left">
-              <PlusMenu onInsertSkill={handleInsertSkill} onInsertFile={handleInsertFile} onInsertLocalFile={handleInsertLocalFile} onToast={onToast} workspaceRoot={session?.workspace_root} onExpertPick={onExpertChange} currentExpertId={session?.expert_id} currentMode={mode} onModeChange={onModeChange} />
+              <PlusMenu onInsertSkill={handleInsertSkill} onInsertFile={handleInsertFile} onPickFiles={(fs) => attachLocalFiles(fs, pendingFiles, onPendingFilesChange || (() => {}))} onPickImages={(fs) => attachFiles(fs, pendingImages, onPendingImagesChange || (() => {}))} onToast={onToast} workspaceRoot={session?.workspace_root} onExpertPick={onExpertChange} currentExpertId={session?.expert_id} currentMode={mode} onModeChange={onModeChange} />
               <PermissionDropdown mode={permMode} onChange={onPermModeChange} />
               <ExpertSelector
                 current={session?.expert_id}
@@ -481,8 +606,8 @@ export function ChatPanel({
               ) : (
                 <button
                   className="send-btn"
-                  onClick={onSend}
-                  disabled={!session || !prompt.trim()}
+                  onClick={() => onSend(pendingImages, pendingFiles)}
+                  disabled={!session || (!prompt.trim() && pendingImages.length === 0 && pendingFiles.length === 0)}
                   title="发送 (Enter)"
                 >
                   <Icon name="send" size={34} strokeWidth={2.4} />

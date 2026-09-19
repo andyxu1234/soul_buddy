@@ -5,7 +5,12 @@ interface SoulApi {
   updateSession: (sessionId: string, fields: { title?: string; provider?: string; expert_id?: string | null }) => Promise<unknown>
   deleteSession: (sessionId: string) => Promise<unknown>
   getHistory: (sessionId: string) => Promise<unknown>
-  startRun: (sessionId: string, prompt: string) => Promise<unknown>
+  startRun: (sessionId: string, prompt: string,
+    images?: Array<{ filename: string; mime: string; data: string }>,
+    files?: Array<{ filename: string; mime: string; data: string }>) => Promise<unknown>
+  startRunWithAttachments: (sessionId: string, prompt: string,
+    images: Array<{ filename: string; mime: string; data: string }>,
+    files: Array<{ filename: string; mime: string; data: string }>) => Promise<unknown>
   abortRun: (sessionId: string) => Promise<unknown>
   resolvePermission: (sessionId: string, callId: string, choice: string) => Promise<unknown>
   listRules: () => Promise<unknown>
@@ -68,6 +73,11 @@ export const native = {
   openPath: (p: string) => getNative().openPath(p),
 }
 
+/** 聊天图片附件的访问地址（<session>/uploads/，需 cookie 鉴权）。 */
+export function sessionUploadUrl(sessionId: string, file: string): string {
+  return `${getSoul().getBase()}/api/v1/sessions/${sessionId}/uploads/${encodeURIComponent(file)}`
+}
+
 export const api = {
   getBase: () => getSoul().getBase(),
   listSessions: () => getSoul().listSessions() as Promise<any[]>,
@@ -80,6 +90,17 @@ export const api = {
   getHistory: (sid: string) => getSoul().getHistory(sid) as Promise<any[]>,
   startRun: (sid: string, prompt: string) =>
     getSoul().startRun(sid, prompt) as Promise<any>,
+  startRunWithAttachments: (sid: string, prompt: string,
+    images: Array<{ filename: string; mime: string; data: string }>,
+    files: Array<{ filename: string; mime: string; data: string }>) =>
+    // 不做任何前置"桥版本"拦截。历史上两版检测（Function.length 形参个数、
+    // bridgeVersion 取值对象写错成 window.soul.api）都恒误报，把全部附件
+    // 发送挡在门外。桥接陈旧的唯一后果是旧窗口忽略附件参数（JS 静默丢弃
+    // 多余实参），交给发送异常兜底与重启解决；preload 侧仍暴露 bridgeVersion
+    // 供诊断，但不作为拦截依据。
+    getSoul().startRun(sid, prompt,
+      images.length ? images : undefined,
+      files.length ? files : undefined) as Promise<any>,
   abortRun: (sid: string) => getSoul().abortRun(sid) as Promise<any>,
   resolvePermission: (sid: string, callId: string, choice: string) =>
     getSoul().resolvePermission(sid, callId, choice) as Promise<any>,

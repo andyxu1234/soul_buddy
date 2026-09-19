@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { SoulEvent, Artifact } from '../types'
+import { sessionUploadUrl } from '../api'
 import { ToolCallCard } from './ToolCallCard'
 import { EmotionBall } from './EmotionBall'
 import { Markdown } from './Markdown'
@@ -21,6 +22,8 @@ function formatTime(ts: number): string {
 
 interface Props {
   events: SoulEvent[]
+  /** 当前会话 id，用于拉取用户上传的图片附件 */
+  sessionId?: string
   onOpenArtifacts: () => void
   onOpenChanges: () => void
   onEditUser?: (text: string) => void
@@ -29,7 +32,7 @@ interface Props {
 }
 
 type Item =
-  | { id: string; kind: 'user'; text: string; timestamp: number }
+  | { id: string; kind: 'user'; text: string; timestamp: number; images?: Array<{ file: string; name?: string; mime?: string }>; files?: Array<{ file: string; name?: string; mime?: string; size?: number }> }
   | { id: string; kind: 'assistant'; text: string; finished?: boolean; isLast?: boolean }
   | { id: string; kind: 'reasoning'; text: string; provider?: string }
   | { id: string; kind: 'tool'; name: string; callId?: string; args?: any; result?: string; isError?: boolean }
@@ -44,6 +47,7 @@ function copyText(text: string) {
 const ABORT_REASON: Record<string, string> = {
   max_turns: '已达轮次上限，已自动停止',
   user_abort: '你中断了这次运行',
+  run_error: '运行出错，已停止（原因见下方消息）',
 }
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -73,7 +77,76 @@ function ReasoningCard({ text, provider }: { text: string; provider?: string }) 
   )
 }
 
-export function MessageList({ events, onOpenArtifacts, onOpenChanges, onEditUser, expert }: Props) {
+/** 用户消息里的图片附件：blob 拉取 + 点击放大。 */
+function UserImages({ sessionId, images }: {
+  sessionId?: string
+  images: Array<{ file: string; name?: string; mime?: string }>
+}) {
+  const [urls, setUrls] = useState<Record<string, string>>({})
+  const [zoom, setZoom] = useState<string | null>(null)
+  const key = images.map((i) => i.file).join('|')
+
+  useEffect(() => {
+    if (!sessionId) return
+    let cancelled = false
+    for (const im of images) {
+      if (!im.file || urls[im.file]) continue
+      fetch(sessionUploadUrl(sessionId, im.file), { credentials: 'include' })
+        .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.blob() })
+        .then((b) => { if (!cancelled) setUrls((p) => ({ ...p, [im.file]: URL.createObjectURL(b) })) })
+        .catch(() => {})
+    }
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, key])
+
+  if (!images.length) return null
+  return (
+    <div className="bubble-images">
+      {images.map((im) => (
+        urls[im.file] ? (
+          <img
+            key={im.file}
+            className="bubble-img"
+            src={urls[im.file]}
+            alt={im.name || '图片'}
+            onClick={() => setZoom(urls[im.file])}
+            title="点击放大"
+          />
+        ) : (
+          <div key={im.file} className="bubble-img loading" title={im.name || ''} />
+        )
+      ))}
+      {zoom && (
+        <div className="img-lightbox" onClick={() => setZoom(null)}>
+          <img src={zoom} alt="" />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** 用户消息里的文件附件 chip（只显示文件名，不展示内容）。 */
+function UserFiles({ files }: {
+  files: Array<{ file: string; name?: string; mime?: string; size?: number }>
+}) {
+  if (!files.length) return null
+  return (
+    <div className="bubble-files">
+      {files.map((f) => (
+        <span className="bubble-file-chip" key={f.file} title={f.name || f.file}>
+          <Icon name="file" size={13} />
+          <span className="bfc-name">{f.name || f.file}</span>
+          {typeof f.size === 'number' && f.size > 0 && (
+            <span className="bfc-size">{Math.max(1, Math.round(f.size / 1024))}KB</span>
+          )}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+export function MessageList({ events, sessionId, onOpenArtifacts, onOpenChanges, onEditUser, expert }: Props) {
   const [vote, setVote] = useState<Record<string, 'up' | 'down'>>({})
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
@@ -110,7 +183,12 @@ export function MessageList({ events, onOpenArtifacts, onOpenChanges, onEditUser
           break
         case 'message':
           if (d.role === 'user') {
-            out.push({ id: `u-${ev.sequence}`, kind: 'user', text: d.text ?? '', timestamp: ev.timestamp })
+            out.push({
+              id: `u-${ev.sequence}`, kind: 'user', text: d.text ?? '',
+              timestamp: ev.timestamp,
+              images: Array.isArray(d.images) ? d.images : undefined,
+              files: Array.isArray(d.files) ? d.files : undefined,
+            })
           } else if (d.role === 'assistant') {
             if (d.text) {
               out.push({
@@ -210,6 +288,8 @@ export function MessageList({ events, onOpenArtifacts, onOpenChanges, onEditUser
                 <div className="row user">
                   <div className="body-wrap">
                     <div className="bubble">{it.text}</div>
+                    <UserImages sessionId={sessionId} images={it.images || []} />
+                    <UserFiles files={it.files || []} />
                     <div className="user-meta">
                       <span className="um-time">{formatTime(it.timestamp)}</span>
                       <span className="um-divider" />

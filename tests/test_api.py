@@ -160,3 +160,32 @@ def test_sse_live_stream_delivers_delta_and_plain_event_names():
     finally:
         server.should_exit = True
         th.join(timeout=5)
+
+
+def test_run_provider_crash_emits_run_aborted(client, monkeypatch):
+    """A provider crash mid-run must emit run_aborted (+ error message) so the
+    UI unsticks, instead of dying silently and showing 运行中 forever."""
+    from soul_buddy.providers.offline import OfflineProvider
+
+    def boom(self, req):
+        raise RuntimeError("simulated provider crash")
+
+    monkeypatch.setattr(OfflineProvider, "create", boom)
+    token = client.app.state.runtime.bootstrap_token
+    client.get(f"/bootstrap?token={token}", headers={"host": "127.0.0.1"})
+    body = {"workspace_root": str(client.app.state.runtime.storage.base)}
+    sid = client.post("/api/v1/sessions", json=body).json()["id"]
+    r = client.post("/api/v1/runs", json={"session_id": sid, "prompt": "hi"})
+    assert r.status_code == 200
+
+    import time
+    h: list = []
+    for _ in range(200):
+        h = client.get(f"/api/v1/sessions/{sid}/history").json()
+        if any(e["type"] == "run_aborted" for e in h):
+            break
+        time.sleep(0.05)
+    aborted = [e for e in h if e["type"] == "run_aborted"]
+    assert aborted and aborted[-1]["data"]["reason"] == "run_error"
+    assert any(e["type"] == "message" and e["data"].get("role") == "assistant"
+               and "运行出错" in e["data"].get("text", "") for e in h)

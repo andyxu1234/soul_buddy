@@ -45,7 +45,8 @@ from .permissions import (
     PermissionAction, PermissionPolicy, PermissionRequest, READ_TOOLS, WRITE_TOOLS,
 )
 from .prompts import get_system_prompt
-from .providers.base import ModelTurn, Provider, ProviderRequest, ToolCall, sanitize_tool_messages
+from .providers.base import (ModelTurn, Provider, ProviderRequest, ToolCall,
+                             sanitize_tool_messages, with_file_refs)
 from .skills.registry import authorize_skill_tool
 from . import rubric as _rubric
 
@@ -108,7 +109,19 @@ class SoulAgent:
     # --- main entry ---------------------------------------------------------
     @_ls_traceable(name="SoulAgent.run", run_type="chain")
     async def run(self, session: SessionRecord, text: str,
-                 approver) -> RunResult:
+                  approver, images: list[dict] | None = None,
+                  files: list[dict] | None = None) -> RunResult:
+        """Run one user request.
+
+        `images` (optional) is a list of already-persisted upload references:
+        {"path", "media_type", "name", "size", "file"}. They ride along in the
+        first user message as file-ref blocks; providers resolve them to
+        native image blocks at wire time.
+
+        `files` (optional) is the same contract for text attachments:
+        {"type": "file", "path", "name", "mime", "size", "file"} refs. Content
+        is read from disk only when the request goes on the wire.
+        """
         self._call_counter.clear()
         self.modified_files = []           # shared ref: visible to abort
         modified_files = self.modified_files
@@ -124,9 +137,20 @@ class SoulAgent:
         # request_id 贯穿单次用户请求,用于串联 jsonl 事件、change、回滚指针
         request_id = new_id()
         messages = self.storage.bootstrap_messages(session, self.provider)
-        messages.append(self.provider.initial_user_message(text))
-        await self._aemit(session, EventType.MESSAGE,
-                          {"role": "user", "text": text, "request_id": request_id})
+        messages.append(with_file_refs(
+            self.provider.initial_user_message(text, images), files))
+        user_event: dict = {"role": "user", "text": text, "request_id": request_id}
+        if images:
+            user_event["images"] = [
+                {"file": im.get("file", ""), "name": im.get("name", ""),
+                 "mime": im.get("media_type", ""), "size": im.get("size", 0)}
+                for im in images]
+        if files:
+            user_event["files"] = [
+                {"file": f.get("file", ""), "name": f.get("name", ""),
+                 "mime": f.get("mime", ""), "size": f.get("size", 0)}
+                for f in files]
+        await self._aemit(session, EventType.MESSAGE, user_event)
         await self._aemit(session, EventType.RUN_STARTED,
                           {"session_id": session.id, "request_id": request_id,
                            "started_at": time.time()})

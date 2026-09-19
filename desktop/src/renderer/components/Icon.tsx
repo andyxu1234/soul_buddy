@@ -44,6 +44,7 @@ export type IconName =
   | 'thumbs-down'
   | 'clock'
   | 'paperclip'
+  | 'image'
   | 'info'
   | 'wrench'
   | 'brain'
@@ -207,6 +208,13 @@ const PATHS: Record<IconName, JSX.Element> = {
   ),
   paperclip: (
     <path d="M21.4 11.6 12 21a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.6" />
+  ),
+  image: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="m21 15-5-5L5 21" />
+    </>
   ),
   info: (
     <>

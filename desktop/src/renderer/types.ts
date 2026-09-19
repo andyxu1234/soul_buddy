@@ -27,6 +27,28 @@ export interface SoulEvent {
   timestamp: number
 }
 
+/** 输入框里待发送的图片附件（base64 已就绪，previewUrl 仅供本机预览）。 */
+export interface ImageAttachment {
+  id: string
+  name: string
+  mime: string
+  size: number
+  /** 不含 data: 前缀的 base64 */
+  base64: string
+  previewUrl: string
+}
+
+/** 输入框里待发送的普通文件附件。只持文件句柄，内容在发送时才读取
+ *  （与 ZCode/WorkBuddy 一致：UI 只显示文件名，不解析内容）。 */
+export interface FileAttachment {
+  id: string
+  name: string
+  mime: string
+  size: number
+  /** 原始 File 句柄；发送时才读取为 base64 */
+  file: File
+}
+
 export interface SessionRecord {
   id: string
   workspace_root: string

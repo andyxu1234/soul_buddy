@@ -8,7 +8,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .base import ModelTurn, Provider, ProviderRequest, ToolCall, ToolSpec
+from .base import (ModelTurn, Provider, ProviderRequest, ToolCall, ToolSpec,
+                   image_file_bytes, map_file_refs, map_image_refs,
+                   missing_image_note)
 
 log = logging.getLogger("soul_buddy.provider")
 
@@ -23,6 +25,20 @@ def _block_to_dict(block: Any) -> dict:
         return {"type": "tool_use", "id": block.id,
                 "name": block.name, "input": block.input}
     return {"type": t, "text": getattr(block, "text", "")}
+
+
+def _to_wire_messages(messages: list[Any]) -> list[Any]:
+    """Resolve internal image refs -> Anthropic base64 source blocks,
+    and file attachment refs -> text blocks (read from disk here)."""
+    def _convert(ref: dict) -> dict:
+        data, mt = image_file_bytes(ref)
+        if data is None:
+            return missing_image_note(ref)
+        import base64
+        return {"type": "image",
+                "source": {"type": "base64", "media_type": mt,
+                           "data": base64.b64encode(data).decode("ascii")}}
+    return map_file_refs(map_image_refs(messages, _convert))
 
 
 def _to_anthropic_tools(tools: list[ToolSpec]) -> list[dict]:
@@ -70,7 +86,7 @@ class AnthropicProvider(Provider):
             "model": self.model,
             "max_tokens": req.max_tokens,
             "system": req.system,
-            "messages": req.messages,
+            "messages": _to_wire_messages(req.messages),
         }
         if req.tools:
             kwargs["tools"] = self.tool_schemas(req.tools)
@@ -139,7 +155,7 @@ class AnthropicProvider(Provider):
             "model": self.model,
             "max_tokens": req.max_tokens,
             "system": req.system,
-            "messages": req.messages,
+            "messages": _to_wire_messages(req.messages),
         }
         if tools:
             kwargs["tools"] = tools

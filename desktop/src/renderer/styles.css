@@ -716,3 +716,141 @@
   color: var(--fg-tertiary);
   line-height: 1.55;
 }
+
+/* ---------- 聊天图片附件（输入框 chip + 气泡缩略图 + lightbox） ---------- */
+.attach-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px 0;
+}
+.attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--bd-subtle);
+  border-radius: var(--r-md);
+  padding: 5px 8px 5px 5px;
+  max-width: 220px;
+}
+.attach-chip img {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  border-radius: var(--r-xs);
+  flex: none;
+}
+.attach-name {
+  font-size: 12px;
+  color: var(--fg-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attach-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border: none;
+  border-radius: var(--r-full);
+  background: var(--bg-hover);
+  color: var(--fg-tertiary);
+  cursor: pointer;
+  padding: 0;
+}
+.attach-remove:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* 文件附件 chip（无缩略图，只显示文件名 —— 同 ZCode/WorkBuddy） */
+.attach-chip.is-file {
+  padding: 7px 8px 7px 10px;
+  gap: 6px;
+}
+.attach-file-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--brand, #3b82f6);
+  flex: none;
+}
+.attach-file-size {
+  font-size: 11px;
+  color: var(--fg-tertiary);
+  flex: none;
+}
+
+.bubble-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+.bubble-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--bd-subtle);
+  border-radius: var(--r-full);
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--fg-secondary);
+  max-width: 260px;
+}
+.bubble-file-chip svg {
+  color: var(--brand, #3b82f6);
+  flex: none;
+}
+.bubble-file-chip .bfc-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bubble-file-chip .bfc-size {
+  color: var(--fg-tertiary);
+  font-size: 11px;
+  flex: none;
+}
+
+.bubble-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+.bubble-img {
+  width: 148px;
+  max-height: 110px;
+  object-fit: cover;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--bd-subtle);
+  cursor: zoom-in;
+  display: block;
+}
+.bubble-img.loading {
+  background: var(--bg-sunken);
+  min-height: 80px;
+}
+.img-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 18, 0.74);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 400;
+  cursor: zoom-out;
+}
+.img-lightbox img {
+  max-width: 92vw;
+  max-height: 92vh;
+  border-radius: var(--r-md);
+  box-shadow: var(--sh-lg);
+}

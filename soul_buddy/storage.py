@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import re
 import threading
+import uuid
 from pathlib import Path
 from typing import Iterable
 
@@ -76,6 +77,36 @@ class SessionStore:
             if d.is_dir():
                 return d
         return None
+
+    # --- chat uploads (images + text file attachments) ----------------------
+    def save_upload(self, session_id: str, workspace_root: str,
+                    filename: str, mime: str, data: bytes) -> dict:
+        """Persist a user-uploaded chat attachment under <session>/uploads/.
+
+        The transcript only records the returned metadata (never the bytes),
+        keeping replay, token estimation and final_prompt snapshots light.
+        """
+        up = self._session_dir(session_id, workspace_root) / "uploads"
+        up.mkdir(parents=True, exist_ok=True)
+        safe = Path(filename or "image").name.strip() or "image"
+        name = f"{uuid.uuid4().hex[:8]}-{safe}"
+        (up / name).write_bytes(data)
+        return {"file": name, "name": safe, "mime": mime, "size": len(data)}
+
+    def uploads_dir(self, session_id: str, workspace_root: str = "") -> Path | None:
+        d = self._session_dir(session_id, workspace_root) / "uploads"
+        return d if d.is_dir() else None
+
+    def upload_path(self, session_id: str, name: str) -> Path | None:
+        """Resolve an uploaded file by name; None unless it is a plain child
+        of the session's uploads dir (path-traversal safe)."""
+        if not name or Path(name).name != name:
+            return None
+        d = self._find_session_dir(session_id)
+        if d is None:
+            return None
+        p = d / "uploads" / name
+        return p if p.is_file() else None
 
     # --- session metadata --------------------------------------------------
     def save_session(self, rec: SessionRecord) -> None:
@@ -219,6 +250,36 @@ class SessionStore:
         messages: list[dict] = []
         # Pending assistant turn: (text, [ToolCall, ...])
         pending: tuple[str, list[ToolCall]] | None = None
+        sdir = self._session_dir(session.id, session.workspace_root)
+
+        def replay_images(data: dict) -> list[dict] | None:
+            """MESSAGE(user) image metadata -> buffer image ref blocks."""
+            metas = data.get("images")
+            if not metas:
+                return None
+            refs: list[dict] = []
+            for im in metas:
+                p = sdir / "uploads" / str(im.get("file", ""))
+                if p.is_file():
+                    refs.append({"type": "image", "path": str(p),
+                                 "media_type": im.get("mime") or "image/png",
+                                 "name": im.get("name") or ""})
+            return refs or None
+
+        def replay_files(data: dict) -> list[dict] | None:
+            """MESSAGE(user) file metadata -> buffer file ref blocks."""
+            metas = data.get("files")
+            if not metas:
+                return None
+            refs: list[dict] = []
+            for f in metas:
+                p = sdir / "uploads" / str(f.get("file", ""))
+                if p.is_file():
+                    refs.append({"type": "file", "path": str(p),
+                                 "name": f.get("name") or "",
+                                 "mime": f.get("mime") or "",
+                                 "size": f.get("size", 0)})
+            return refs or None
 
         def flush_assistant() -> None:
             nonlocal pending
@@ -242,7 +303,11 @@ class SessionStore:
                 if role == "user":
                     flush_assistant()
                     if provider is not None:
-                        messages.append(provider.initial_user_message(text))
+                        from .providers.base import with_file_refs
+                        messages.append(with_file_refs(
+                            provider.initial_user_message(
+                                text, replay_images(data)),
+                            replay_files(data)))
                     else:
                         messages.append({"role": "user", "content": text})
                 elif role == "assistant":

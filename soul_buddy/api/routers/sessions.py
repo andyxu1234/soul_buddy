@@ -142,3 +142,19 @@ async def resolve_permission(session_id: str, call_id: str, body: dict,
             detail={"status": "expired",
                     "detail": "permission request is not pending"})
     return {"status": "resolved", "call_id": call_id, "choice": choice}
+
+
+@router.get("/{session_id}/uploads/{name}", dependencies=[Depends(require_auth)])
+async def session_upload(session_id: str, name: str,
+                         runtime=Depends(get_runtime)):
+    """Serve a chat image attachment stored under <session>/uploads/."""
+    from fastapi.responses import FileResponse
+    import mimetypes
+
+    if runtime.get_session(session_id) is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    p = runtime.storage.upload_path(session_id, name)
+    if p is None:
+        raise HTTPException(status_code=404, detail="upload not found")
+    mt = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
+    return FileResponse(p, media_type=mt, filename=p.name)

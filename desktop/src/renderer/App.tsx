@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, streamEvents } from './api'
-import type { SoulEvent, SessionRecord, PermissionRequest, Artifact, ContextUsage } from './types'
+import type { SoulEvent, SessionRecord, PermissionRequest, Artifact, ContextUsage, ImageAttachment, FileAttachment } from './types'
 import { SessionList, sessionTitle, type NavView } from './components/SessionList'
 import { ChatPanel } from './components/ChatPanel'
 import type { AgentMode } from './components/PlusMenu'
@@ -46,11 +46,25 @@ function formatError(err: unknown): string {
 
 let toastSeq = 0
 
+/** 发送时才读取文件内容为 base64（UI 阶段从不解析，同 ZCode/WorkBuddy）。 */
+function fileToBase64(f: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result).split(',')[1] ?? '')
+    r.onerror = () => reject(r.error)
+    r.readAsDataURL(f)
+  })
+}
+
 export default function App() {
   const [sessions, setSessions] = useState<SessionRecord[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [events, setEvents] = useState<SoulEvent[]>([])
   const [prompt, setPrompt] = useState('')
+  // 主 composer 的待发送图片附件（发送失败时要原样还原给用户）
+  const [pendingImages, setPendingImages] = useState<ImageAttachment[]>([])
+  // 主 composer 的待发送文件附件（只持句柄，发送时才读内容）
+  const [pendingFiles, setPendingFiles] = useState<FileAttachment[]>([])
   const [perms, setPerms] = useState<PermissionRequest[]>([])
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
   const [streamText, setStreamText] = useState('')
@@ -238,14 +252,43 @@ export default function App() {
     return () => close()
   }, [selectedId, loadArtifacts, loadSessions, pushToast])
 
-  const handleSend = () => {
-    if (!selectedId || !prompt.trim() || running) return
+  const handleSend = async (images: ImageAttachment[] = [], files: FileAttachment[] = []) => {
+    if (!selectedId || running) return
+    if (!prompt.trim() && images.length === 0 && files.length === 0) return
     const text = prompt.trim()
+    const sid = selectedId
     setPrompt('')
-    setRunningIds((p) => new Set(p).add(selectedId))
-    api.startRun(selectedId, text).catch((e) => {
-      setRunningIds((p) => { const n = new Set(p); n.delete(selectedId); return n })
-      setPrompt(text)   // 失败时把内容还给用户，别丢
+    setPendingImages([])
+    setPendingFiles([])
+    setRunningIds((p) => new Set(p).add(sid))
+    const restore = () => {
+      // 失败时把内容还给用户，别丢
+      setPrompt(text)
+      setPendingImages(images)
+      setPendingFiles(files)
+    }
+    let call: Promise<unknown>
+    try {
+      // 发送时才把文件读成 base64 原始字节；文本解析在后端组装 LLM 请求时进行
+      const filePayload = await Promise.all(files.map(async (f) => ({
+        filename: f.name, mime: f.mime, data: await fileToBase64(f.file),
+      })))
+      call = (images.length || filePayload.length)
+        ? api.startRunWithAttachments(
+            sid, text,
+            images.map((i) => ({ filename: i.name, mime: i.mime, data: i.base64 })),
+            filePayload)
+        : api.startRun(sid, text)
+    } catch (e) {
+      // 同步异常（如桥接陈旧）：绝不能让 running 卡死
+      setRunningIds((p) => { const n = new Set(p); n.delete(sid); return n })
+      restore()
+      pushToast(formatError(e), 'err')
+      return
+    }
+    call.catch((e) => {
+      setRunningIds((p) => { const n = new Set(p); n.delete(sid); return n })
+      restore()
       pushToast(formatError(e), 'err')
     })
   }
@@ -293,16 +336,35 @@ export default function App() {
   }
 
   /** 空状态：从居中 composer 发起新会话 —— 自动 create + startRun + select */
-  const handleStartNewSession = (prompt: string, workspaceRoot: string) => {
-    if (!prompt.trim()) return
-    api.createSession(workspaceRoot, undefined, prompt.slice(0, 30))
+  const handleStartNewSession = async (prompt: string, workspaceRoot: string,
+                                       images: ImageAttachment[] = [],
+                                       files: FileAttachment[] = []) => {
+    if (!prompt.trim() && images.length === 0 && files.length === 0) return
+    api.createSession(workspaceRoot, undefined, prompt.slice(0, 30) || '附件任务')
       .then((s) => {
         const rec = s as SessionRecord
         setSessions((prev) => [rec, ...prev])
         setSelectedId(rec.id)
         setActiveView('chat')
         // 切到新 session 后自动启动运行
-        api.startRun(rec.id, prompt).catch((e) => pushToast(formatError(e), 'err'))
+        try {
+          const call = (async () => {
+            // 发送时才把文件读成 base64（UI 阶段从不解析内容）
+            const filePayload = await Promise.all(files.map(async (f) => ({
+              filename: f.name, mime: f.mime, data: await fileToBase64(f.file),
+            })))
+            if (images.length || filePayload.length) {
+              return api.startRunWithAttachments(
+                rec.id, prompt,
+                images.map((i) => ({ filename: i.name, mime: i.mime, data: i.base64 })),
+                filePayload)
+            }
+            return api.startRun(rec.id, prompt)
+          })()
+          call.catch((e) => pushToast(formatError(e), 'err'))
+        } catch (e) {
+          pushToast(formatError(e), 'err')
+        }
       })
       .catch((e) => pushToast(formatError(e), 'err'))
   }
@@ -484,6 +546,10 @@ export default function App() {
             onToast={pushToast}
             onStartNewSession={handleStartNewSession}
             onNavigate={(v) => setActiveView(v)}
+            pendingImages={pendingImages}
+            onPendingImagesChange={setPendingImages}
+            pendingFiles={pendingFiles}
+            onPendingFilesChange={setPendingFiles}
             mode={selectedId ? sessionMode[selectedId] : undefined}
             onModeChange={handleModeChange}
           />

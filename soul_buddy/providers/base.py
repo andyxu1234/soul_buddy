@@ -89,8 +89,23 @@ class Provider(ABC):
     # --- message-buffer helpers (provider-native shape) -------------------
     # Real providers override these to emit their own wire format; the base
     # implementation stays Anthropic-shaped for the offline/mock provider.
-    def initial_user_message(self, text: str) -> dict:
-        return {"role": "user", "content": text}
+    def initial_user_message(self, text: str,
+                             images: list[dict] | None = None) -> dict:
+        """Build the first user message of a run.
+
+        `images` is a list of *reference* blocks — {"type": "image", "path",
+        "media_type", ...} — that stay in the in-memory buffer instead of
+        base64 payloads, so token estimation, transcript snapshots (final_prompt)
+        and compaction never see megabyte-sized strings. Real providers resolve
+        the refs to their native image shape at wire time (see map_image_refs).
+        """
+        if not images:
+            return {"role": "user", "content": text}
+        content: list[dict] = []
+        if text:
+            content.append({"type": "text", "text": text})
+        content.extend(dict(img) for img in images)
+        return {"role": "user", "content": content}
 
     def format_assistant_message(self, text: str,
                                  tool_calls: list[ToolCall]) -> dict:
@@ -118,6 +133,118 @@ class Provider(ABC):
     # --- tool schema conversion (overridden by real providers) -------------
     def tool_schemas(self, tools: list[ToolSpec]) -> list[dict]:
         raise NotImplementedError
+
+
+def map_block_refs(messages: list[Any], convert, block_type: str) -> list[Any]:
+    """Return a shallow copy of `messages` with ``{"type": block_type,
+    "path": ...}`` content blocks replaced by `convert(ref)` blocks.
+
+    Refs are file references kept small in the buffer; the converter resolves
+    them to provider-native blocks (or a replacement text block when the file
+    is unreadable). Everything else is passed through by reference.
+    """
+    out: list[Any] = []
+    for m in messages:
+        if not isinstance(m, dict):
+            out.append(m)
+            continue
+        c = m.get("content")
+        if isinstance(c, list) and any(
+                isinstance(b, dict) and b.get("type") == block_type
+                and b.get("path") for b in c):
+            mapped = [
+                convert(b) if (isinstance(b, dict)
+                               and b.get("type") == block_type
+                               and b.get("path")) else b
+                for b in c
+            ]
+            nm = dict(m)
+            nm["content"] = mapped
+            out.append(nm)
+        else:
+            out.append(m)
+    return out
+
+
+def map_image_refs(messages: list[Any], convert) -> list[Any]:
+    """Return a copy of `messages` with internal image refs mapped for the wire.
+
+    An internal image ref is a content block ``{"type": "image", "path": ...,
+    "media_type": ...}`` (file reference, kept small in the buffer). `convert`
+    receives the ref dict and returns the provider-native block (or a
+    replacement text block when the file is unreadable). Everything else is
+    passed through by reference — the copy is shallow.
+    """
+    return map_block_refs(messages, convert, "image")
+
+
+def image_file_bytes(ref: dict) -> tuple[bytes | None, str]:
+    """Read an image ref's bytes off disk. Returns (bytes|None, media_type)."""
+    from pathlib import Path as _Path
+    mt = ref.get("media_type") or "image/png"
+    try:
+        data = _Path(ref["path"]).read_bytes()
+        return data, mt
+    except OSError:
+        return None, mt
+
+
+def missing_image_note(ref: dict) -> dict:
+    """Wire-safe replacement for an image whose file vanished mid-session."""
+    name = ref.get("name") or ref.get("path") or "image"
+    return {"type": "text", "text": f"[图片文件已不存在: {name}]"}
+
+
+# Max characters of one text attachment injected into the wire prompt.
+MAX_FILE_REF_CHARS = 20_000
+
+
+def file_ref_text(ref: dict) -> dict:
+    """Resolve a file attachment ref to a wire text block.
+
+    The file is read from disk at wire time (the buffer only ever holds the
+    small ref — the same contract as image refs), decoded as UTF-8 and fenced.
+    Binary or missing files degrade to a note instead of failing the request.
+    """
+    from pathlib import Path as _Path
+    name = ref.get("name") or ref.get("path") or "file"
+    try:
+        raw = _Path(ref["path"]).read_bytes()
+    except OSError:
+        return {"type": "text", "text": f"[附件文件已不存在: {name}]"}
+    try:
+        text = raw.decode("utf-8")
+    except (UnicodeDecodeError, ValueError):
+        return {"type": "text",
+                "text": f"[附件 {name} 是二进制文件，内容未注入]"}
+    if len(text) > MAX_FILE_REF_CHARS:
+        text = (text[:MAX_FILE_REF_CHARS]
+                + f"\n… [已截断，原文件共 {len(text)} 字符]")
+    return {"type": "text",
+            "text": f"用户附加了文件 {name}，内容如下：\n````\n{text}\n````"}
+
+
+def map_file_refs(messages: list[Any]) -> list[Any]:
+    """Return a wire copy with file refs replaced by resolved text blocks."""
+    return map_block_refs(messages, file_ref_text, "file")
+
+
+def with_file_refs(msg: dict, files: list[dict] | None) -> dict:
+    """Append file-ref blocks to a user message from initial_user_message.
+
+    File refs look like ``{"type": "file", "path", "name", "mime", "size"}``
+    and ride in the buffer as lightweight references; providers resolve them
+    at wire time (see file_ref_text).
+    """
+    if not files:
+        return msg
+    content = msg.get("content")
+    if isinstance(content, str):
+        msg["content"] = [{"type": "text", "text": content}] if content else []
+    elif not isinstance(content, list):
+        msg["content"] = []
+    msg["content"].extend(dict(f) for f in files)
+    return msg
 
 
 def sanitize_tool_messages(messages: list[dict]) -> None:

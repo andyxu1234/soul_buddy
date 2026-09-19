@@ -24,8 +24,10 @@ interface Props {
   onExpertPick?: (expertId: string | null) => void
   /** 引用项目文件时，把 @relativePath 插入输入框 */
   onInsertFile?: (relativePath: string) => void
-  /** 添加本地文件时，把文件内容插入输入框 */
-  onInsertLocalFile?: (filename: string, content: string) => void
+  /** 添加本地文件时，挂起为文件 chip（不读内容，发送时才解析） */
+  onPickFiles?: (files: File[]) => void
+  /** 选择图片后，把图片加为聊天附件 */
+  onPickImages?: (files: File[]) => void
   /** 切换 Agent 模式 */
   onModeChange?: (mode: AgentMode) => void
   /** toast 提示 */
@@ -40,7 +42,7 @@ interface Props {
 
 type SubMenu = null | 'files' | 'experts' | 'skills' | 'mcp' | 'modes'
 
-export function PlusMenu({ onInsertSkill, onExpertPick, onInsertFile, onInsertLocalFile, onModeChange, onToast, workspaceRoot, currentExpertId, currentMode = 'default' }: Props) {
+export function PlusMenu({ onInsertSkill, onExpertPick, onInsertFile, onPickFiles, onPickImages, onModeChange, onToast, workspaceRoot, currentExpertId, currentMode = 'default' }: Props) {
   const [open, setOpen] = useState(false)
   const [sub, setSub] = useState<SubMenu>(null)
   const [skills, setSkills] = useState<SkillItem[]>([])
@@ -50,26 +52,33 @@ export function PlusMenu({ onInsertSkill, onExpertPick, onInsertFile, onInsertLo
   const [fileSearch, setFileSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const localFileRef = useRef<HTMLInputElement>(null)
+  const imageFileRef = useRef<HTMLInputElement>(null)
   const ref = useRef<HTMLDivElement>(null)
 
   const handlePickLocalFile = () => {
     localFileRef.current?.click()
   }
 
-  const onLocalFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]
-    if (!f) return
-    try {
-      const text = await f.text()
-      onInsertLocalFile?.(f.name, text)
-    } catch {
-      onToast?.(`无法读取 ${f.name}（可能是二进制文件）`, 'err')
-    } finally {
-      // reset 以便再次选同一个文件也能触发 change
-      e.target.value = ''
-      setOpen(false)
-      setSub(null)
-    }
+  const handlePickImages = () => {
+    imageFileRef.current?.click()
+  }
+
+  const onImageFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files || [])
+    if (picked.length) onPickImages?.(picked)
+    // reset 以便再次选同一个文件也能触发 change
+    e.target.value = ''
+    setOpen(false)
+    setSub(null)
+  }
+
+  const onLocalFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files || [])
+    if (picked.length) onPickFiles?.(picked)
+    // reset 以便再次选同一个文件也能触发 change
+    e.target.value = ''
+    setOpen(false)
+    setSub(null)
   }
 
   // 外部关闭
@@ -173,7 +182,16 @@ export function PlusMenu({ onInsertSkill, onExpertPick, onInsertFile, onInsertLo
         <div className="plus-popover" role="menu">
           <SubItem icon="folder" label="引用项目文件" subKey="files" activeSub={sub} onEnter={enterSub} />
           <TopItem icon="file" label="添加文件" onClick={handlePickLocalFile} />
-          <input ref={localFileRef} type="file" style={{ display: 'none' }} onChange={onLocalFileChange} />
+          <input ref={localFileRef} type="file" multiple style={{ display: 'none' }} onChange={onLocalFileChange} />
+          <TopItem icon="image" label="图片" onClick={handlePickImages} />
+          <input
+            ref={imageFileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            style={{ display: 'none' }}
+            onChange={onImageFilesChange}
+          />
           <SubItem icon="zap" label="模式" subKey="modes" activeSub={sub} onEnter={enterSub} />
           <SubItem icon="user" label="专家" subKey="experts" activeSub={sub} onEnter={enterSub} />
           <SubItem icon="sparkles" label="Skills" subKey="skills" activeSub={sub} onEnter={enterSub} />

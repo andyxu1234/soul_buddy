@@ -11,7 +11,9 @@ import json
 import logging
 from typing import Any
 
-from .base import ModelTurn, Provider, ProviderRequest, ToolCall, ToolSpec
+from .base import (ModelTurn, Provider, ProviderRequest, ToolCall, ToolSpec,
+                   image_file_bytes, map_file_refs, map_image_refs,
+                   missing_image_note)
 
 log = logging.getLogger("soul_buddy.provider")
 
@@ -25,6 +27,19 @@ def _to_openai_tools(tools: list[ToolSpec]) -> list[dict]:
             "parameters": t.parameters,
         },
     } for t in tools]
+
+
+def _to_wire_messages(messages: list[Any]) -> list[Any]:
+    """Resolve internal image refs -> OpenAI image_url (data URL) parts,
+    and file attachment refs -> text blocks (read from disk here)."""
+    def _convert(ref: dict) -> dict:
+        data, mt = image_file_bytes(ref)
+        if data is None:
+            return missing_image_note(ref)
+        import base64
+        url = f"data:{mt};base64,{base64.b64encode(data).decode('ascii')}"
+        return {"type": "image_url", "image_url": {"url": url}}
+    return map_file_refs(map_image_refs(messages, _convert))
 
 
 def _reasoning_of(obj: Any) -> str | None:
@@ -64,7 +79,8 @@ class OpenAIChatProvider(Provider):
         return _to_openai_tools(tools)
 
     def _kwargs(self, req: ProviderRequest) -> dict[str, Any]:
-        wire = [{"role": "system", "content": req.system}] + list(req.messages)
+        wire = [{"role": "system", "content": req.system}] + \
+            _to_wire_messages(req.messages)
         tools = self.tool_schemas(req.tools) if req.tools else None
         kwargs: dict[str, Any] = {"model": self.model, "messages": wire,
                                   "max_tokens": req.max_tokens}
@@ -204,9 +220,6 @@ class OpenAIChatProvider(Provider):
             usage=usage, reasoning=reasoning,
         )
 
-    def initial_user_message(self, text: str) -> dict:
-        return {"role": "user", "content": text}
-
     def format_assistant_message(self, text: str,
                                  tool_calls: list[ToolCall]) -> dict:
         """OpenAI-native assistant message: content + tool_calls array."""
@@ -225,7 +238,8 @@ class OpenAIChatProvider(Provider):
                 for c, r in results]
 
     def create(self, req: ProviderRequest) -> ModelTurn:
-        wire = [{"role": "system", "content": req.system}] + list(req.messages)
+        wire = [{"role": "system", "content": req.system}] + \
+            _to_wire_messages(req.messages)
         tools = self.tool_schemas(req.tools) if req.tools else None
         kwargs: dict[str, Any] = {"model": self.model, "messages": wire,
                                   "max_tokens": req.max_tokens}

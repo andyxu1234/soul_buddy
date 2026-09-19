@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +12,108 @@ from ..deps import get_runtime, require_auth
 
 router = APIRouter(prefix="/api/v1/runs", tags=["runs"])
 log = logging.getLogger("soul_buddy.runs")
+
+# Chat image attachments (multimodal input)
+ALLOWED_IMAGE_MIMES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+MAX_IMAGES_PER_RUN = 5
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
+
+# Chat file attachments (text files, parsed only at LLM wire time)
+MAX_FILES_PER_RUN = 5
+MAX_FILE_BYTES = 8 * 1024 * 1024
+
+
+def _prepare_images(runtime, session, images: list) -> list[dict]:
+    """Validate + persist uploaded images; return buffer-safe ref dicts."""
+    if not isinstance(images, list):
+        raise HTTPException(status_code=400, detail="images 必须是数组")
+    if len(images) > MAX_IMAGES_PER_RUN:
+        raise HTTPException(
+            status_code=400,
+            detail=f"每次最多上传 {MAX_IMAGES_PER_RUN} 张图片")
+    refs: list[dict] = []
+    for i, im in enumerate(images):
+        if not isinstance(im, dict):
+            raise HTTPException(status_code=400, detail=f"images[{i}] 格式错误")
+        mime = str(im.get("mime") or "").lower().split(";")[0]
+        if mime not in ALLOWED_IMAGE_MIMES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"images[{i}]: 不支持的图片类型 {mime or '(缺失)'}，"
+                       f"支持 {', '.join(sorted(ALLOWED_IMAGE_MIMES))}")
+        raw = str(im.get("data") or "")
+        if raw.startswith("data:"):
+            _, _, raw = raw.partition(",")   # strip data URL prefix
+        try:
+            data = base64.b64decode(raw, validate=True)
+        except (binascii.Error, ValueError):
+            raise HTTPException(
+                status_code=400, detail=f"images[{i}]: base64 解码失败")
+        if not data:
+            raise HTTPException(status_code=400, detail=f"images[{i}]: 图片内容为空")
+        if len(data) > MAX_IMAGE_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"images[{i}]: 图片超过 {MAX_IMAGE_BYTES // (1024*1024)}MB 上限")
+        meta = runtime.storage.save_upload(
+            session.id, session.workspace_root,
+            str(im.get("filename") or "image.png"), mime, data)
+        refs.append({
+            "type": "image",
+            "path": str(runtime.storage._session_dir(
+                session.id, session.workspace_root) / "uploads" / meta["file"]),
+            "media_type": mime,
+            "name": meta["name"],
+            "size": meta["size"],
+            "file": meta["file"],
+        })
+    return refs
+
+
+def _prepare_files(runtime, session, files: list) -> list[dict]:
+    """Validate + persist uploaded chat files; return buffer-safe ref dicts.
+
+    The bytes are only transport-decoded here (base64 -> disk); the text is
+    parsed when the provider assembles the wire request (file_ref_text).
+    """
+    if not isinstance(files, list):
+        raise HTTPException(status_code=400, detail="files 必须是数组")
+    if len(files) > MAX_FILES_PER_RUN:
+        raise HTTPException(
+            status_code=400,
+            detail=f"每次最多上传 {MAX_FILES_PER_RUN} 个文件")
+    refs: list[dict] = []
+    for i, f in enumerate(files):
+        if not isinstance(f, dict):
+            raise HTTPException(status_code=400, detail=f"files[{i}] 格式错误")
+        raw = str(f.get("data") or "")
+        if raw.startswith("data:"):
+            _, _, raw = raw.partition(",")   # strip data URL prefix
+        try:
+            data = base64.b64decode(raw, validate=True)
+        except (binascii.Error, ValueError):
+            raise HTTPException(
+                status_code=400, detail=f"files[{i}]: base64 解码失败")
+        if not data:
+            raise HTTPException(status_code=400, detail=f"files[{i}]: 文件内容为空")
+        if len(data) > MAX_FILE_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"files[{i}]: 文件超过 {MAX_FILE_BYTES // (1024*1024)}MB 上限")
+        mime = str(f.get("mime") or "application/octet-stream").split(";")[0][:100]
+        meta = runtime.storage.save_upload(
+            session.id, session.workspace_root,
+            str(f.get("filename") or "file"), mime, data)
+        refs.append({
+            "type": "file",
+            "path": str(runtime.storage._session_dir(
+                session.id, session.workspace_root) / "uploads" / meta["file"]),
+            "mime": mime,
+            "name": meta["name"],
+            "size": meta["size"],
+            "file": meta["file"],
+        })
+    return refs
 
 
 @router.post("", dependencies=[Depends(require_auth)])
@@ -32,19 +136,47 @@ async def start_run(body: dict, runtime=Depends(get_runtime)):
 
     gate = runtime.permission_gate
     agent = runtime.build_agent(session, gate)
-    log.info("start_run: session=%s prompt_len=%d", session_id, len(prompt))
+
+    image_refs: list[dict] = []
+    if body.get("images"):
+        image_refs = _prepare_images(runtime, session, body["images"])
+    file_refs: list[dict] = []
+    if body.get("files"):
+        file_refs = _prepare_files(runtime, session, body["files"])
+    if (image_refs or file_refs) and not prompt.strip():
+        prompt = "（用户上传了附件，请查看并结合内容回答）"
+    log.info("start_run: session=%s prompt_len=%d images=%d files=%d",
+             session_id, len(prompt), len(image_refs), len(file_refs))
 
     async def _run():
         try:
-            await agent.run(session, prompt, gate)
+            await agent.run(session, prompt, gate,
+                            images=image_refs or None, files=file_refs or None)
             log.info("start_run: finished session=%s", session_id)
         except asyncio.CancelledError:
             log.info("start_run: ABORTED session=%s turns=%d",
                      session_id, agent.turns_used)
             raise
-        except Exception:
+        except Exception as exc:
+            # Provider/agent crash: without this the run task dies silently —
+            # no run_finished/aborted event — and the UI shows 运行中 forever.
+            # Surface the failure as a run_aborted + assistant message so the
+            # user sees what happened and the session unstickes.
             log.exception("start_run: FAILED session=%s", session_id)
-            raise
+            try:
+                detail = f"运行出错：{exc}"
+                ev = runtime.storage.append_event(session_id, "run_aborted", {
+                    "reason": "run_error", "modified_files": [],
+                    "turns": getattr(agent, "turns_used", 0),
+                    "error": str(exc)[:500],
+                })
+                await runtime.events.publish(session_id, ev)
+                ev2 = runtime.storage.append_event(
+                    session_id, "message",
+                    {"role": "assistant", "text": detail})
+                await runtime.events.publish(session_id, ev2)
+            except Exception:
+                log.exception("start_run: error-event emission failed")
         finally:
             runtime._active_runs.pop(session_id, None)
             runtime._active_agents.pop(session_id, None)
