@@ -25,7 +25,7 @@
 ### 四条核心结论（v1.2 更新）
 
 1. ~~不建议直接开发~~ → **可以开工**。Q01–Q26（§3）+ **R01–R16（§12）** 已全部答复，
-   完整决策见 [implementation-plan.md §11/§12](./implementation-plan.md)。
+   完整决策见 [implementation-plan.md §11/§12](../implementation-plan.md)。
    一轮澄清补齐的 6 项安全兜底：
    - **A06 bash 命令路径二次扫描**（原设计最大的洞，已补规则 2b + 不可判定时禁止记忆放行）
    - **A05 hard_deny 标准化后正则匹配**（+ 分段扫描，堵死多空格/大小写/变量拼接绕过）
@@ -97,7 +97,7 @@
 
 > 编号 BR-xx，测试用例中的"追溯规则"列引用本表
 > **v1.1 更新**：澄清后由 20 条扩展为 **30 条**（BR-21~BR-30 为澄清新增），
-> 修订项在"澄清"列标注；完整决策见 [implementation-plan.md §11](./implementation-plan.md)
+> 修订项在"澄清"列标注；完整决策见 [implementation-plan.md §11](../implementation-plan.md)
 
 | 编号 | 业务规则 | 出处 | 澄清 |
 |---|---|---|---|
@@ -163,7 +163,7 @@
 ## 3. 需求疑问清单（✅ Q01–Q26 已全部澄清，2026-09-08）
 
 > 标记：🔴 阻断（不澄清无法设计或直接高风险）🟡 需澄清（影响覆盖）🟢 建议明确
-> **"澄清"列 = 架构师正式答复（A01–A26）**，与 [implementation-plan.md §11](./implementation-plan.md) 逐条对应；
+> **"澄清"列 = 架构师正式答复（A01–A26）**，与 [implementation-plan.md §11](../implementation-plan.md) 逐条对应；
 > 答复引发的业务规则变更已回写 §2.2（BR-21~BR-30 为新增），引发的设计变更已回写 §4.12 新增测试点。
 
 ### 3.1 需求文档内部不一致 🔴
@@ -557,10 +557,10 @@ offline.set_script([lambda req: ModelTurn(text=f"收到 {len(req.messages)} 条"
 | 交付物 | 文件 | 状态 |
 |---|---|---|
 | 需求解析与测试分析 | 本文档 | ✅ 已交付（**基线 v1.2**，两轮澄清后） |
-| 完整测试用例集 | [test-cases.md](./test-cases.md) | ✅ 已交付（v1.2，**157 条**） |
-| 一轮澄清答复（A01–A26） | 本文档 §3「澄清」列 + [implementation-plan.md §11](./implementation-plan.md) | ✅ 已交付 |
-| **二轮澄清答复（B01–B16）** | 本文档 §12 + [implementation-plan.md §12](./implementation-plan.md) | ✅ 已交付 |
-| 澄清引发的设计变更 | implementation-plan §1/§4/§5/§6/§7、[feasibility-analysis.md](./feasibility-analysis.md) ADR-006~**012**、INV-9~**14** | ✅ 已同步 |
+| 完整测试用例集 | [test-cases.md](test-cases.md) | ✅ 已交付（v1.2，**157 条**） |
+| 一轮澄清答复（A01–A26） | 本文档 §3「澄清」列 + [implementation-plan.md §11](../implementation-plan.md) | ✅ 已交付 |
+| **二轮澄清答复（B01–B16）** | 本文档 §12 + [implementation-plan.md §12](../implementation-plan.md) | ✅ 已交付 |
+| 澄清引发的设计变更 | implementation-plan §1/§4/§5/§6/§7、[feasibility-analysis.md](../feasibility-analysis.md) ADR-006~**012**、INV-9~**14** | ✅ 已同步 |
 | 自动化测试工程 | 待产出 | ⏳ 待 P0 完成后搭建 |
 | AI 评测集（golden set） | 待产出 | ⏳ 待 P2 完成后建设 |
 
@@ -570,7 +570,7 @@ offline.set_script([lambda req: ModelTurn(text=f"收到 {len(req.messages)} 条"
 
 > **来源**：测试方对 v1.1 基线的二次审查。一轮澄清解决了"需求没写"，但**补出来的安全设计自身引入了新缺口**。
 > **性质**：R01/R02/R04 属于**澄清引入的新问题**（非原始需求遗漏），R03/R05/R06 属于**澄清措辞自相矛盾或定义漂移**。
-> **完整决策见** [implementation-plan.md §12](./implementation-plan.md)（B01–B16，每条含决策 / 理由与被否选项 / 落地位置）。
+> **完整决策见** [implementation-plan.md §12](../implementation-plan.md)（B01–B16，每条含决策 / 理由与被否选项 / 落地位置）。
 
 ### 12.1 审计链完整性 🔴
 

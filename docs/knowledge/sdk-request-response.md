@@ -5,7 +5,7 @@
 > 读完这篇,`soul_buddy/providers/` 里的转换代码就不再是"魔法"。
 
 > **状态:已实现**(本文描述的是 `soul_buddy/providers/` 的现状,2026-09)。
-> 设计期规划见 [modules/07-providers.md](./modules/07-providers.md)。
+> 设计期规划见 [modules/07-providers.md](../modules/07-providers.md)。
 >
 > 先建立一个基本认知:两个 SDK 本身都是 HTTP JSON API 的薄封装。请求体是一个 dict
 > (SDK 在发出前用 pydantic 模型校验),响应体由 SDK 反序列化成 pydantic 对象。
@@ -439,6 +439,6 @@ sequenceDiagram
 
 ## 8. 关联文档
 
-- 模块详解:[modules/07-providers.md](./modules/07-providers.md)(Provider 层的设计期规划与代码清单)
-- Agent 循环全景:[agent-loop-map.md](./agent-loop-map.md)(ModelTurn 之后循环怎么走)
+- 模块详解:[modules/07-providers.md](../modules/07-providers.md)(Provider 层的设计期规划与代码清单)
+- Agent 循环全景:[agent-loop-map.md](../architecture-design/agent-loop-map.md)(ModelTurn 之后循环怎么走)
 - 图片/文件附件的引用块设计:[base.py](https://github.com/andyxu1234/soul_buddy/blob/main/soul_buddy/providers/base.py) 的 `initial_user_message` / `map_image_refs` / `file_ref_text`

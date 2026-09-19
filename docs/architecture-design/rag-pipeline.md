@@ -1,7 +1,7 @@
 # RAG 管线全景（资料库如何工作）
 
-> 对应代码：`soul_buddy/knowledge/`（模块文档见 [14-knowledge.md](modules/14-knowledge.md)）、
-> 会话侧接线见 [15-experts.md](modules/15-experts.md)。
+> 对应代码：`soul_buddy/knowledge/`（模块文档见 [14-knowledge.md](../modules/14-knowledge.md)）、
+> 会话侧接线见 [15-experts.md](../modules/15-experts.md)。
 > 本文用 4 张图讲清两件事：**文档怎么变成向量入库**（索引管线），**提问时怎么查出相关片段**（查询管线）。
 
 ## 1. 全景：两条独立的管线
@@ -176,5 +176,5 @@ sequenceDiagram
 
 ## 6. 关联文档
 
-- 模块细节：[modules/14-knowledge.md](modules/14-knowledge.md) · 会话/专家侧：[modules/15-experts.md](modules/15-experts.md)
+- 模块细节：[modules/14-knowledge.md](../modules/14-knowledge.md) · 会话/专家侧：[modules/15-experts.md](../modules/15-experts.md)
 - 存储全景（含 kb 资产）：[data-and-storage.md](data-and-storage.md)

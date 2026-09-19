@@ -51,17 +51,17 @@ Get-Process electron,python -ErrorAction SilentlyContinue | Stop-Process -Force
 
 | 文档 | 内容 | 什么时候看 |
 |---|---|---|
-| **[architecture-mindmap.md](./architecture-mindmap.md)** | 项目全景思维导图：形态、内核、安全、记忆、扩展、持久化八大分支 + 目录树 + 分层架构 + 阅读路线 | **新读者从这里开始** |
+| **[architecture-mindmap.md](architecture-design/architecture-mindmap.md)** | 项目全景思维导图：形态、内核、安全、记忆、扩展、持久化八大分支 + 目录树 + 分层架构 + 阅读路线 | **新读者从这里开始** |
 | **[implementation-plan.md](./implementation-plan.md)** | 完整实施计划：架构、目录结构、关键接口签名、P0–P5 里程碑、10 条风险与规避、测试策略，**§11 需求澄清答复 A01–A26** | 想看原始设计与演进依据时 |
 | **[feasibility-analysis.md](./feasibility-analysis.md)** | 架构评审：领域建模、5 个架构缺陷（含 2 个阻断级）、**9 份 ADR**、11 条不变式、工期重估与里程碑重排 | 读完计划立刻读这份 —— 修正了计划里的缺陷 |
-| **[agent-loop-map.md](./agent-loop-map.md)** | Agent 循环全景：主循环每个分支、权限/子代理/压缩子流程、终止路径、13 张 mermaid 图 | **想搞懂执行引擎必读** |
-| **[data-and-storage.md](./data-and-storage.md)** | 数据与存储：全部持久化资产、事件生命周期、审计链、文件历史与回滚 | 排查"数据去哪了" |
-| **[desktop-architecture.md](./desktop-architecture.md)** | 桌面端架构：进程模型、启动/关闭时序、看门狗、安全边界 | 排查启动/后端问题 |
-| **[skills-and-mcp.md](./skills-and-mcp.md)** | Skills 与 MCP：技能生命周期、权限窄化、连接器信任模型 | 写技能 / 接连接器前 |
-| **[learn-workbuddy-mapping.md](./learn-workbuddy-mapping.md)** | 章节对照表：s01–s24 每一章对应 soul_buddy 哪个模块、该抄还是该弃、属于哪个阶段 | 与教学代码对照时 |
-| **[test-analysis.md](./test-analysis.md)** | 需求解析：11 个模块划分、**30 条业务规则**、**Q01–Q26 疑问 + 澄清列**、全量测试点、风险矩阵、准出标准 | 开工前看 —— 澄清已闭环 |
-| **[test-cases.md](./test-cases.md)** | 完整用例集：**144 条**（含正常 / 异常 / 边界 / 安全 / AI 专项），无阻塞项 | 开发与自测时逐条对照 |
-| **[rubric-design.md](./rubric-design.md)** | **运行时 rubric 自评闭环**：维度模型（gating + quality）、信号源映射、规则/LLM 分层判分、聚合门槛、与 `agent.py` 的集成点、INV-15~21、R0–R5 落地分期 | 要动 agent 主循环 / 做交付质量闭环时 |
+| **[agent-loop-map.md](architecture-design/agent-loop-map.md)** | Agent 循环全景：主循环每个分支、权限/子代理/压缩子流程、终止路径、13 张 mermaid 图 | **想搞懂执行引擎必读** |
+| **[data-and-storage.md](architecture-design/data-and-storage.md)** | 数据与存储：全部持久化资产、事件生命周期、审计链、文件历史与回滚 | 排查"数据去哪了" |
+| **[desktop-architecture.md](architecture-design/desktop-architecture.md)** | 桌面端架构：进程模型、启动/关闭时序、看门狗、安全边界 | 排查启动/后端问题 |
+| **[skills-and-mcp.md](architecture-design/skills-and-mcp.md)** | Skills 与 MCP：技能生命周期、权限窄化、连接器信任模型 | 写技能 / 接连接器前 |
+| **[learn-workbuddy-mapping.md](architecture-design/learn-workbuddy-mapping.md)** | 章节对照表：s01–s24 每一章对应 soul_buddy 哪个模块、该抄还是该弃、属于哪个阶段 | 与教学代码对照时 |
+| **[test-analysis.md](test-quality/test-analysis.md)** | 需求解析：11 个模块划分、**30 条业务规则**、**Q01–Q26 疑问 + 澄清列**、全量测试点、风险矩阵、准出标准 | 开工前看 —— 澄清已闭环 |
+| **[test-cases.md](test-quality/test-cases.md)** | 完整用例集：**144 条**（含正常 / 异常 / 边界 / 安全 / AI 专项），无阻塞项 | 开发与自测时逐条对照 |
+| **[rubric-design.md](architecture-design/rubric-design.md)** | **运行时 rubric 自评闭环**：维度模型（gating + quality）、信号源映射、规则/LLM 分层判分、聚合门槛、与 `agent.py` 的集成点、INV-15~21、R0–R5 落地分期 | 要动 agent 主循环 / 做交付质量闭环时 |
 | **[modules/20-rubric.md](./modules/20-rubric.md)** | rubric 模块实现文档：文件清单、维度与信号源、主循环集成、降级、**§18 验证记录** | 改 rubric 时 |
 | **[modules/INDEX.md](./modules/INDEX.md)** | 模块文档总览：按代码包拆分的 15 份模块 md（职责 / 文件清单 / 设计约束），**全部已实现** | 改某模块前读对应文档 |
 
@@ -70,7 +70,7 @@ Get-Process electron,python -ErrorAction SilentlyContinue | Stop-Process -Force
 >
 > ✅ 测试评审结论：**Q01–Q26 已全部澄清**（2026-09-08）。答复见
 > [implementation-plan.md §11](./implementation-plan.md)，测试结果在
-> [test-analysis.md §3](./test-analysis.md) 各表末列「澄清」。
+> [test-analysis.md §3](test-quality/test-analysis.md) 各表末列「澄清」。
 > 其中 **A06 修补了一个真实安全缺口**：原设计的路径守卫不扫描 bash 命令字符串内的路径，
 > 用户点一次"允许" agent 就能 `cat ~/.ssh/id_rsa`。已通过 `permissions/bash_scan.py` + INV-9 解决。
 
@@ -92,8 +92,8 @@ Get-Process electron,python -ErrorAction SilentlyContinue | Stop-Process -Force
 - [x] P4 Electron 桌面壳（sidecar 生命周期 + 看门狗）
 - [x] P3 记忆 + SQLite
 - [x] P5 skills/MCP + 子代理 + 正式打包
-- [x] 运行时 rubric 自评闭环（R0–R5 已落地：[rubric-design.md](./rubric-design.md) 设计 · [modules/20-rubric.md](./modules/20-rubric.md) 实现 · `SOUL_RUBRIC_MODE=advisory|enforce` 启用）
-- [ ] 后续打磨（详见 [agent-loop-map.md](./agent-loop-map.md) §12 的已知缺口清单）
+- [x] 运行时 rubric 自评闭环（R0–R5 已落地：[rubric-design.md](architecture-design/rubric-design.md) 设计 · [modules/20-rubric.md](./modules/20-rubric.md) 实现 · `SOUL_RUBRIC_MODE=advisory|enforce` 启用）
+- [ ] 后续打磨（详见 [agent-loop-map.md](architecture-design/agent-loop-map.md) §12 的已知缺口清单）
 
 ---
 

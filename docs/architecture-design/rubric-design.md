@@ -8,7 +8,7 @@
 
 > **状态：已实现**（R0–R5 全部落地，2026-09-16）。
 > 实现侧的文档（文件清单 / 主循环集成 / 降级 / 验证记录）见
-> **[modules/20-rubric.md](./modules/20-rubric.md)**。
+> **[modules/20-rubric.md](../modules/20-rubric.md)**。
 > 落地过程中对本文档的**两处修正**（`modified_files` 改为从事件流推导、
 > judge 降级判据由 provider 名字改为 `llm_backed` 能力位）已回填到该文档 §5 / §12。
 

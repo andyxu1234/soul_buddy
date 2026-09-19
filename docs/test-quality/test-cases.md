@@ -1,8 +1,8 @@
 # soul_buddy 测试用例集
 
-> 配套文档：[test-analysis.md](./test-analysis.md)（需求解析 / 澄清清单 / 风险矩阵）
+> 配套文档：[test-analysis.md](test-analysis.md)（需求解析 / 澄清清单 / 风险矩阵）
 > 用例规模：**144 条**（v1.1：132 条 + 澄清新增 12 条；估算值，实际以执行记录为准）
-> 追溯编号：`BR-xx` 业务规则见 test-analysis §2.2，`Axx` 澄清答复见 [implementation-plan.md §11](./implementation-plan.md)，`TP` 测试点见 test-analysis §4
+> 追溯编号：`BR-xx` 业务规则见 test-analysis §2.2，`Axx` 澄清答复见 [implementation-plan.md §11](../implementation-plan.md)，`TP` 测试点见 test-analysis §4
 > 优先级：P0 冒烟必过 / P1 主要功能 / P2 次要 / P3 边缘
 > **基线状态：v1.1（2026-09-08）—— Q01–Q26 已全部澄清，🔴 阻塞标记全部解除，用例可执行**
 

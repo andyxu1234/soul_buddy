@@ -394,6 +394,6 @@ L1 截断 + L2 supersede 常常就够了。若不带 early return，会无谓地
 ## 14. 关联文档
 
 - 模块总览：[10-context.md](./10-context.md)
-- 主循环全景：[../agent-loop-map.md](../agent-loop-map.md)
+- 主循环全景：[../agent-loop-map.md](../architecture-design/agent-loop-map.md)
 - 主循环模块：[06-agent.md](./06-agent.md) · 配置常量：[01-config.md](./01-config.md) · 事件：[03-events.md](./03-events.md)
 - 设计约束来源：`docs/feasibility-analysis.md`（ADR-009 / INV-5）· `docs/implementation-plan.md` §11（A12 / A13 / A23 / BR-19）

@@ -213,15 +213,15 @@ flowchart TD
 
 | 你想… | 路线 |
 |---|---|
-| **第一次了解项目** | [项目总览](overview.md) → 本文 → [模块索引](modules/INDEX.md) 挑感兴趣的 |
+| **第一次了解项目** | [项目总览](../overview.md) → 本文 → [模块索引](../modules/INDEX.md) 挑感兴趣的 |
 | **搞懂 Agent 循环的每个分支** | [Agent 循环全景图](agent-loop-map.md)（13 张图：思维导图/状态机/主循环流程图/时序图） |
 | **理解数据都存在哪、怎么流** | [数据与存储架构](data-and-storage.md) |
 | **理解桌面端怎么起来的** | [桌面端架构与生命周期](desktop-architecture.md) |
 | **用/写技能、接 MCP 连接器** | [Skills 与 MCP 系统](skills-and-mcp.md) |
 | **理解子代理怎么隔离** | [Subagent 架构](subagents-architecture.md) |
-| **改某个模块的代码** | 先读对应 [modules/0x.md](modules/INDEX.md)（设计约束仍有效）→ 再看代码 |
-| **追溯一个设计为什么这样定** | [feasibility-analysis.md](feasibility-analysis.md)（ADR/INV）+ [problems/](problems/001-tools-permissions-design.md) 三篇决策记录 |
-| **跑测试 / 对应用例** | [test-analysis.md](test-analysis.md)（模块 M1–M12 划分）+ [test-cases.md](test-cases.md)（144 条用例） |
+| **改某个模块的代码** | 先读对应 [modules/0x.md](../modules/INDEX.md)（设计约束仍有效）→ 再看代码 |
+| **追溯一个设计为什么这样定** | [feasibility-analysis.md](../feasibility-analysis.md)（ADR/INV）+ [problems/](../problems/001-tools-permissions-design.md) 三篇决策记录 |
+| **跑测试 / 对应用例** | [test-analysis.md](../test-quality/test-analysis.md)（模块 M1–M12 划分）+ [test-cases.md](../test-quality/test-cases.md)（144 条用例） |
 
 ## 6. 关键数字速查
 

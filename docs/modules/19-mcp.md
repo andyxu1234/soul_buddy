@@ -623,7 +623,7 @@ disconnect 会调 `unbind_connector`，模型下一轮就**看不到**该连接�
 ## 13. 关联文档
 
 - Skills 系统：[18-skills.md](./18-skills.md)（同为扩展机制，注入顺序相邻）
-- 设计总览：[Skills 与 MCP 系统](../skills-and-mcp.md)（信任模型 / D1 窄化 / 汇合点）
+- 设计总览：[Skills 与 MCP 系统](../architecture-design/skills-and-mcp.md)（信任模型 / D1 窄化 / 汇合点）
 - 注入位置：`agent.py::_system_prompt`（skills/subagents/expert 之后、Workspace root 之前）
 - 权限层：[08-permissions.md](./08-permissions.md)（规则 7：`mcp__` → ASK）
 - 工具层：[09-tools.md](./09-tools.md)（`registry.register` / `unregister_matching`）

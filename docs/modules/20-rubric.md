@@ -3,9 +3,9 @@
 > 代码包：`soul_buddy/rubric/` + `agent.py::run` 验收阶段 + `models.py::EventType`
 > 功能模块：M16 运行时交付验收 ｜ 阶段：P6（2026-09） ｜ 风险：中
 > 关联：[06-agent.md](./06-agent.md)（主循环插入点）· [02-models.md](./02-models.md)（事件与 RunResult）· [08-permissions.md](./08-permissions.md)（只读消费其决策）· [17-human-in-the-loop.md](./17-human-in-the-loop.md)（相邻的交互闭环）· [12-api.md](./12-api.md)（SSE 透传）
-> **状态：🟢 已实现**（R0–R5 全部落地，2026-09-16）—— 设计定稿见 [rubric-design.md](../rubric-design.md)，
+> **状态：🟢 已实现**（R0–R5 全部落地，2026-09-16）—— 设计定稿见 [rubric-design.md](../architecture-design/rubric-design.md)，
 > 验证结果见本文 §18。
-> 设计基线（为什么这么设计、备选方案对比、风险表）：**[rubric-design.md](../rubric-design.md)**
+> 设计基线（为什么这么设计、备选方案对比、风险表）：**[rubric-design.md](../architecture-design/rubric-design.md)**
 
 ---
 
@@ -576,7 +576,7 @@ run 会在第二轮就拿到终止型 turn，表现为"一次工具都没调"—
 
 ## 17. 关联文档
 
-- 设计基线：[rubric-design.md](../rubric-design.md)（ADR-010~013 / 完整锚点表 / 17 项风险 / 18 项待确认）
+- 设计基线：[rubric-design.md](../architecture-design/rubric-design.md)（ADR-010~013 / 完整锚点表 / 17 项风险 / 18 项待确认）
 - 主循环：[06-agent.md](./06-agent.md)（`run()` 插入点、first-turn guard 同构模式）
 - 事件与结果：[02-models.md](./02-models.md)（`EventType` / `RunResult` / `Event.to_sse`）
 - 权限层：[08-permissions.md](./08-permissions.md)（rubric 只读消费其决策，见 §11 前置依赖）

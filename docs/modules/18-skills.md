@@ -653,4 +653,4 @@ def authorize_skill_tool(tool: str, path: str | None,
 - [06-agent.md](./06-agent.md) — M2 主循环（`_system_prompt` 注入与执行链）
 - [08-permissions.md](./08-permissions.md) — M4 权限治理层（D1 的上层天花板）
 - [10-context.md](./10-context.md) — token 预算（`parts["skills"]` 的用途）
-- [../skills-and-mcp.md](../skills-and-mcp.md) — 技能生命周期与连接器信任模型（跨模块深度文档）
+- [../skills-and-mcp.md](../architecture-design/skills-and-mcp.md) — 技能生命周期与连接器信任模型（跨模块深度文档）

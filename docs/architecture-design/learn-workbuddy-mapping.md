@@ -252,7 +252,7 @@ learn-workbuddy 里没有任何代码处理这个问题（它只有 3 个工具�
 相对路径按 `cwd` 解析为绝对路径 → `is_relative_to(workspace)` 校验 →
 越界 DENY（不询问）/ 不可判定 ASK（禁记忆）。
 
-参考实现见 [implementation-plan.md §5.3](./implementation-plan.md) 的 `scan_paths()` 骨架。
+参考实现见 [implementation-plan.md §5.3](../implementation-plan.md) 的 `scan_paths()` 骨架。
 
 ### `permissions/normalize.py`（A05）
 

@@ -1,7 +1,7 @@
 # soul_buddy 实施计划
 
 > 主文档。动手前请完整读一遍。
-> 配套：[learn-workbuddy-mapping.md](./learn-workbuddy-mapping.md)（章节对照表）
+> 配套：[learn-workbuddy-mapping.md](architecture-design/learn-workbuddy-mapping.md)（章节对照表）
 > **v1.1（2026-09-08）**：已同步测试评审提出的 26 项需求澄清（A01–A26），
 > 完整答复见 [§11 需求澄清答复](#11-需求澄清答复a01a26)；受影响章节：§1 §3 §4 §5 §6 §7 §8。
 
@@ -820,13 +820,13 @@ SOUL_BUDDY_HOME=
 1. **确认 provider 与 key** —— 推荐 DeepSeek 起步
 2. 从 **P0** 开始，不要跳步（执行顺序见 §6 开头：P0 → P1 → P1.5 → P2 → P4 → P3 → P5）
 3. 每阶段结束跑对应 pytest，验证有效再进入下一阶段
-4. **Q01–Q26 已全部澄清**（§11），开工前把 §11 与 [test-analysis.md](./test-analysis.md) §3 对照读一遍
+4. **Q01–Q26 已全部澄清**（§11），开工前把 §11 与 [test-analysis.md](test-quality/test-analysis.md) §3 对照读一遍
 
 ---
 
 ## 11. 需求澄清答复（A01–A26）
 
-> 来源：测试评审 [test-analysis.md](./test-analysis.md) §3 的 26 项疑问
+> 来源：测试评审 [test-analysis.md](test-quality/test-analysis.md) §3 的 26 项疑问
 > 答复日期：2026-09-08　答复人：架构师　状态：**全部已答复，需求可进入基线**
 > 每条含：**决策** → **理由（含被否选项）** → **落地位置**
 

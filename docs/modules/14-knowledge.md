@@ -52,7 +52,7 @@
 
 ## 6. 关联文档
 
-- **管线全景图（索引/查询两条管线、状态机、schema、降级路径）**：[../rag-pipeline.md](../rag-pipeline.md)
+- **管线全景图（索引/查询两条管线、状态机、schema、降级路径）**：[../rag-pipeline.md](../architecture-design/rag-pipeline.md)
 - 检索工具与会话注入：[15-experts.md](./15-experts.md)
 - 数据与存储全景：docs/data-and-storage.md
 - workbuddy 对应章节：s18_experts_system（专家包）/ s13（RAG 概念在 examples）
