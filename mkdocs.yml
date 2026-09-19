@@ -89,6 +89,7 @@ nav:
       - Rubric 设计基线: rubric-design.md
       - 与 learn-workbuddy 对照: learn-workbuddy-mapping.md
       - Deep Agents 差距分析: deepagents-gap-analysis.md
+      - LLM SDK 请求与响应解析: sdk-request-response.md
       - 问题复盘:
           - 001 工具权限设计: problems/001-tools-permissions-design.md
           - 002 Subagent 阻塞事件循环: problems/002-subagent-blocks-event-loop.md
