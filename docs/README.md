@@ -1,6 +1,8 @@
 # soul_buddy
 
-一个**真能用**的 mini 版 WorkBuddy 桌面 Agent。
+![SoulBuddy](assets/avatar/SoulBuddy.png){ align=right width=110 }
+
+一个**真能用**的  桌面 Coding Agent。
 
 名字取自 WorkBuddy 的 `SOUL.md` —— 它定义 agent 是谁、怎么说话、什么该做什么不该做。
 这个项目的目标不是复刻 WorkBuddy 的全部功能，而是**把 WorkBuddy 的 harness 骨架做出来，并让它真的能干活**。
@@ -13,6 +15,64 @@
 > 具备权限门、审计链、上下文压缩、三层记忆的**可用型** coding agent。
 
 区别于 `learn-workbuddy`（教学演示）：那里 `agent.py` 用正则匹配意图、没有 GUI；这里要真模型、真窗口。
+
+---
+
+## 界面一览
+
+### 主界面与任务执行
+
+![新任务欢迎页](assets/chat.png)
+
+_主页：左侧功能导航（Skills / 专家 / MCP / Rubric / 资料库 / 项目），中间是任务输入框，底部可挂载工作空间。_
+
+![完整任务运行](assets/demo.png)
+
+_一次真实任务：中间对话区实时输出（表格、代码、总结），右侧「任务详情」同步展示 **产物 / 变更 / 概览**，并附 Rubric 打分卡。_
+
+### 输入与快捷操作
+
+![输入框快捷菜单](assets/chat1.png)
+
+_输入框的「+」菜单支持引用项目文件、添加附件与图片、切换模式；`/` 唤起 Skills，`@` 唤起专家，MCP 连接器也可在输入处直接选择。_
+
+### 能力扩展：Skills · 专家 · MCP
+
+![Skills 技能系统](assets/skills.png)
+
+_Skills：领域知识懒加载。启动只读 frontmatter 拼成紧凑索引，正文按需 `use_skill` 加载，可安装 / 启用 / 卸载。_
+
+![专家系统](assets/experts.png)
+
+_专家：预设角色 + 系统提示词的复用包。技术考官、架构师、后端工程师、前端专家、代码审查员等内置预设，可绑定资料库。_
+
+![MCP 连接器](assets/mcp.png)
+
+_MCP：把外部进程提供的工具接进同一条受控派发路径。工具名带 `mcp__<连接器>__<工具>` 命名空间，双层权限（trust ≠ grant）逐次审批。_
+
+### 知识与检索
+
+![资料库](assets/uploadedfile.png)
+
+_资料库 / RAG：上传 md / txt / pdf / docx，后台异步解析分块向量化入 Milvus；对话中由模型自主调用 `search_knowledge` 做 dense + BM25 混合检索，回答带出处。_
+
+### 交付质量：Rubric 自评闭环
+
+![Rubric 评估](assets/rubric.png)
+
+_Rubric：模型说「我做完了」时插入一道验收。硬门槛 Gating（安全性未破防 / 任务实际完成 / 无未处理残留错误）+ 质量维度（工具使用、效率、自纠错、交付规范、代码质量、沟通表达）加权聚合，不达标则把证据回灌重修。_
+
+### 可观测性
+
+![LangSmith 追踪](assets/langsmith.png)
+
+_全链路 Trace：`SoulAgent.run` 作为根 chain，每次 LLM 调用是子 run，形成嵌套追踪树，可按 `request_id` 与 JSONL 事件流对齐。_
+
+### 设置
+
+![设置面板](assets/setting.png)
+
+_设置：外观主题（浅色 / 深色 / 跟随系统）、系统提示词（可覆盖、可 reset）、用户记忆。_
 
 ---
 ## 快速启动
