@@ -145,7 +145,7 @@ except Exception as exc:
 | `SourcePointerResolver` | s14 | 保留可回溯 durable fact |
 
 **改动**：~~`estimate_tokens` 换成 tiktoken~~ → **A23 推翻**：改用纯 Python 启发式估算
-（中文 ×1.5 字符、英文 len/4 加权）。理由：tiktoken 运行时下载 BPE 词表，打包环境失败率极高；
+（中文 ×1.0 字符、ASCII 字母数字 ×0.25、ASCII 符号 ×1/3、emoji ×2.0）。理由：tiktoken 运行时下载 BPE 词表，打包环境失败率极高；
 而 compact 阈值有 25% 余量，启发式精度足够。**除非 P1.5 Spike 验证通过，否则不要引入 tiktoken。**
 
 ### `s13_output_externalization` → `context/externalize.py`

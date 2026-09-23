@@ -9,7 +9,7 @@
 ### 新增模块
 | 模块 | 职责 | 验收点 |
 |---|---|---|
-| `context/compact.py` | `CompactController`：按 provider 窗口 ×0.75 触发（A13）、截断→去重→剪枝→摘要 四级降级链（A12） | 摘要失败不抛、自动降级为剪枝，会话继续 |
+| `context/compact.py` | `CompactController`：按模型窗口 ×0.75 触发（A13）、截断→去重→剪枝→摘要 四级降级链（A12） | 摘要失败不抛、自动降级为剪枝，会话继续 |
 | `context/prompt.py` | `PromptPlanner`：`PromptSegment` 按 `budget_priority` 预算拼装，`dropped_segments` 可解释（A02 接口） | 超额时丢最低优先级段，且明确告知丢了哪段 |
 | `context/__init__.py` | `ContextLayer` 门面 + `build_context_layer()` 工厂 | A02：**P2 不注册 memory segment**，P3 直接 `register` 即可 |
 | `context/externalize.py`（增强） | A15 配额：单会话 ≤200MB/500 文件、全局 ≤2GB，超配额 LRU 删最旧 + `cleanup_global()` | 配额触发后只留最新 N 个文件，删除写审计 |
@@ -22,7 +22,7 @@
 `compact._truncate_tool_results` 对**已截断过**的 tool_result 二次截断，标记串长度漂移（4025 vs 4027），使同名文件组的 dedup 无法合并 → 上下文持续膨胀。改为加 `_truncated` flag 使截断**幂等**。
 
 ### 新增测试（16 个）
-- `test_context.py`：A14 严格 >50KiB、A13 按 provider 窗口、compact 后 token 下降、A12 摘要失败降级不抛、A15 LRU 配额。
+- `test_context.py`：A14 严格 >50KiB、A13 按模型窗口、compact 后 token 下降、A12 摘要失败降级不抛、A15 LRU 配额。
 - `test_prompt_budget.py`：预算内全保留、超额按优先级丢段、`dropped_segments` 可解释。
 - `test_agent_loop::test_long_session_stays_within_budget`：40 个**不同**文件各 5KB 连续读，buffer 有界 (<40)、transcript 仍录全 40 次、`compactions > 3`。
 

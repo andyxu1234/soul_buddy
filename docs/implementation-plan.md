@@ -20,7 +20,7 @@
 | 1 | 真 LLM 驱动 | 断网/拔 key 立刻失效；不是正则匹配 |
 | 2 | 能真操作文件系统 | 让它"读这个文件、改那行、跑测试"，结果真实生效 |
 | 3 | 危险动作拦得住 | `rm -rf`、workspace 外写入、**bash 命令内越界路径** → 被 deny 且审计留痕 |
-| 4 | 长会话不爆上下文 | 连续 30+ 轮工具调用后仍能正常响应（阈值按 provider 窗口，见 A13） |
+| 4 | 长会话不爆上下文 | 连续 30+ 轮工具调用后仍能正常响应（阈值按模型窗口，见 A13） |
 | 5 | 崩溃后可恢复（**A03 精确措辞**） | kill 进程后重启，会话历史与审计链**完整可回放**，用户可查看中断前的所有步骤。**明确不含"自动从中断处续跑"** |
 | 6 | 双击能开 | 打包后原生窗口启动，不需要手敲命令 |
 
@@ -184,7 +184,7 @@ soul_buddy/
 ├── README.md
 │
 ├── soul_buddy/
-│   ├── config.py                     ~110   Settings + 目录布局 + CONTEXT_WINDOW / 配额 / 并发上限
+│   ├── config.py                     ~110   Settings + 目录布局 + CONTEXT_WINDOW（按模型名）/ 配额 / 并发上限
 │   ├── models.py                     ~120   SessionRecord / ToolResult / Event / PermissionRequest
 │   ├── events.py                     ~90    EventBus.subscribe(session_id) + to_sse()
 │   ├── storage.py                    ~360   ★ P0 必交付：JSONL transcript + 尾部崩溃恢复（SQLite 延后 P3）
@@ -214,7 +214,7 @@ soul_buddy/
 │   │
 │   ├── context/
 │   │   ├── externalize.py            ~220   50 KiB 字节阈值(A14) + 配额与 LRU 清理(A15)
-│   │   ├── compact.py                ~340   truncate/dedup/prune/summary + 失败降级链(A12) + 按 provider 阈值(A13)
+│   │   ├── compact.py                ~340   truncate/dedup/prune/summary + 失败降级链(A12) + 按模型窗口阈值(A13)
 │   │   ├── tokens.py                 ~80    A23：启发式估算（tiktoken 为可选增强）
 │   │   └── prompt.py                 ~260   PromptSegment 预算拼装（A02：P2 不注册 memory segment）
 │   │
@@ -482,7 +482,7 @@ class PermissionGate:
 
 | 模块 | 职责 | 触发时机 |
 |---|---|---|
-| `tokens.py` | **A23**：启发式 token 估算（中文 ×1.5 字符、英文 len/4 加权），tiktoken 为可选增强 | 每次估算 |
+| `tokens.py` | **A23**：启发式 token 估算（中文 ×1.0 字符、ASCII 字母数字 ×0.25、ASCII 符号 ×1/3、emoji ×2.0），tiktoken 为可选增强 | 每次估算 |
 | `externalize.py` | 输出 **> 50 KiB（UTF-8 字节，A14）** → 写 `<session>/tool-results/<id>.txt`，返回指针 + 前 2 KiB 预览 | 每次工具执行后 |
 | `compact.py` | `truncate_tool_results` → `dedup_file_reads` → `prune_old_messages` → `generate_summary`；**失败按 A12 降级** | 每次调模型前，`compact_if_needed()` |
 | `prompt.py` | `PromptSegment(name, builder, priority, budget_priority)` 按 char 预算拼装 | 每轮组装 system prompt |
@@ -490,17 +490,20 @@ class PermissionGate:
 ⚠️ **`prune_old_messages` 必须成对删除**：只删 `tool_result` 不删对应的 `tool_use` block，
 Anthropic API 会直接报错。这是 s14 里最容易踩的坑。
 
-**A13 —— compact 阈值按 provider 配置**（取消全局常量）：
+**A13 —— compact 阈值按模型配置**（取消全局常量；键为模型名，2026-09 修订）：
 
 ```python
-CONTEXT_WINDOW = {"deepseek": 64_000, "anthropic": 200_000,
-                  "openai": 128_000, "offline": 8_000}
+DEFAULT_CONTEXT_WINDOW = 32_000
+CONTEXT_WINDOW = {"deepseek-flash": 1_000_000, "deepseek-v4-pro": 1_000_000,
+                  "claude-sonnet-4-20250514": 200_000, "gpt-4o": 128_000,
+                  "Qwen/Qwen3-8B": 32_000, "offline": 8_000}
 COMPACT_TRIGGER_RATIO = 0.75      # 达到窗口 75% 触发
 COMPACT_TARGET_RATIO  = 0.50      # 压到 50%
 RESERVE_FOR_OUTPUT    = 4_096
 
-def needs_compact(tokens: int, provider: str) -> bool:
-    return tokens + RESERVE_FOR_OUTPUT >= CONTEXT_WINDOW[provider] * COMPACT_TRIGGER_RATIO
+def needs_compact(tokens: int, model: str, fixed_overhead: int = 0) -> bool:
+    return (tokens + fixed_overhead + RESERVE_FOR_OUTPUT
+            >= context_window(model) * COMPACT_TRIGGER_RATIO)
 ```
 
 **A12 —— 压缩失败降级链**（任何一级失败都不得终止会话）：
@@ -625,7 +628,7 @@ curl -X POST http://127.0.0.1:8765/api/v1/runs \
 1. `context/tokens.py`：**A23** 启发式估算（不依赖 tiktoken 词表）
 2. `context/externalize.py`：**A14** 阈值 = 50 **KiB（UTF-8 字节）**，严格大于；预览 2 KiB 按字节安全截断
 3. `context/compact.py`：truncate / dedup / prune / summary
-   - **A13**：阈值按 provider 窗口（触发 0.75 / 目标 0.50 / 预留 4096）
+   - **A13**：阈值按模型窗口（触发 0.75 / 目标 0.50 / 预留 4096）
    - **A12**：`generate_summary` 失败 → 降级截断，不得终止会话
 4. `context/prompt.py`：PromptSegment 预算拼装
    - **A02**：**不注册 memory segment**（P3 再接入），禁止塞桩或假数据
@@ -715,7 +718,7 @@ curl -X POST http://127.0.0.1:8765/api/v1/runs \
 |---|---|---|---|
 | 1 | **Windows shell 差异** | `ls`/`rm` 不存在；反斜杠路径；引号解析失败 | **A24**：禁用 `shell=True`，改参数数组；Git Bash 优先、PowerShell 回退；拒绝多行命令；路径一律 `Path.resolve()` |
 | 2 | **打包 Python sidecar** | 缺 DLL、体积失控、冷启动慢 | **P1.5 Spike 前置验证**（1 天）；依赖最小化；**A23 移除 tiktoken**；P4 前只跑开发模式 |
-| 3 | **上下文超限/烧钱** | API 报错或成本失控 | **A13** 按 provider 窗口 ×0.75 触发；**A14** 50 KiB 字节阈值；**A12** 压缩失败降级；MAX_TURNS + **A11** 第 32 轮预警 |
+| 3 | **上下文超限/烧钱** | API 报错或成本失控 | **A13** 按模型窗口 ×0.75 触发；**A14** 50 KiB 字节阈值；**A12** 压缩失败降级；MAX_TURNS + **A11** 第 32 轮预警 |
 | 4 | **无限工具循环** | 反复调同一工具，烧钱不停 | `MAX_TURNS=40` + 重复计数 ≥3 转 deny（作用域=单 run，A02）+ 预算中止 |
 | 5 | **权限误判打断体验** | 每步弹窗，烦到不能用 | 读操作默认 allow；**A26** 目录级记忆（仅 write/edit、30 天、可撤销）；**A16** `deny_rest` 一键拒绝后续；危险动作永远 deny 不询问 |
 | 6 | **Windows 文件锁/fsync** | 崩溃恢复弱 | `O_APPEND` 原子追加 + 尾部截断恢复；audit `msvcrt.locking`；**A19** 锁超时 5s 降级不阻塞 |
@@ -797,9 +800,9 @@ pip install fastapi uvicorn sqlalchemy aiosqlite httpx \
 
 `.env.example`：
 ```bash
-# 填任意一个即可，探测顺序 deepseek → anthropic → openai-chat → offline
+# 填任意一个即可，探测顺序 deepseek → siliconflow → anthropic → openai-chat → offline
 DEEPSEEK_API_KEY=
-DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_MODEL=deepseek-flash
 
 ANTHROPIC_API_KEY=
 ANTHROPIC_BASE_URL=
@@ -898,9 +901,9 @@ SOUL_BUDDY_HOME=
 理由：压缩是优化手段，不是核心路径。让一个优化失败导致会话终止是本末倒置（BR-19 的精神延伸）。
 落地：`context/compact.py`；用例 TC-M7-010。
 
-**A13｜compact 阈值按 provider 配置。**
-决策：`CONTEXT_WINDOW = {deepseek:64k, anthropic:200k, openai:128k, offline:8k}`；触发 `0.75`、目标 `0.50`、`RESERVE_FOR_OUTPUT=4096`。条件：`tokens + 4096 >= window * 0.75`。
-理由：三家窗口差 3 倍以上，全局常量必然在某一方出错（要么过早压缩丢信息，要么过晚触发超限）。
+**A13｜compact 阈值按模型配置。**
+决策：`CONTEXT_WINDOW` 以**模型名**为键（deepseek-flash 1M / claude-sonnet-4 200k / gpt-4o 128k / Qwen3-8B 32k / offline 8k），未收录模型回落 `DEFAULT_CONTEXT_WINDOW=32k`，由 `context_window(model)` 解析；触发 `0.75`、目标 `0.50`、`RESERVE_FOR_OUTPUT=4096`。条件：`tokens + overhead + 4096 >= window * 0.75`。
+理由：同一平台下不同模型窗口能差 30 倍以上（1M vs 32k），按 provider 命名会把它们混为一谈——早期 `openai` 键与 provider 名 `openai-chat` 不匹配，gpt-4o 实际一直按 8k 压缩。
 落地：§5.5；`config.py`。
 
 **A14｜externalize 阈值 = 50 KiB（UTF-8 字节），严格大于。**
@@ -951,7 +954,7 @@ SOUL_BUDDY_HOME=
 落地：`memory/db.py`；BR-16 修订；用例 TC-M8-005。
 
 **A23｜默认移除 tiktoken，改启发式估算。**
-决策：默认用纯 Python 启发式（中文 ×1.5 字符、英文 len/4 加权）；tiktoken 降级为**可选增强**，仅当 P1.5 Spike 验证 `--collect-data tiktoken` + `TIKTOKEN_CACHE_DIR` 可行才启用。Spike 必验项由「tiktoken 可用」改为「**token 估算在打包环境可用**」。
+决策：默认用纯 Python 启发式（中文 ×1.0 字符、ASCII 字母数字 ×0.25、ASCII 符号 ×1/3、emoji ×2.0；2026-09 按经验换算重标定）；tiktoken 降级为**可选增强**，仅当 P1.5 Spike 验证 `--collect-data tiktoken` + `TIKTOKEN_CACHE_DIR` 可行才启用。Spike 必验项由「tiktoken 可用」改为「**token 估算在打包环境可用**」。
 理由：tiktoken 运行时下载 BPE 词表，打包环境失败率极高；而阈值有 25% 余量，启发式精度完全够用。**用一个高风险依赖换 5% 的精度不划算**。
 落地：`context/tokens.py`；用例 TC-M11-002 改写。
 

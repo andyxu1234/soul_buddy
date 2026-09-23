@@ -134,7 +134,7 @@ def _hard_split(para: str, heading_path: str, max_tokens: int,
                 overlap_tokens: int) -> list[Chunk]:
     """按字符切超大段落,带字符级重叠。
 
-    字符/token 换算按本文本实测(中文 ~1.4 token/字,ASCII ~0.25),不做全局假设。
+    字符/token 换算按本文本实测(中文 ~1 token/字,ASCII ~0.25),不做全局假设。
     """
     per_token = max(len(para) / max(estimate_tokens(para), 1), 0.5)
     step_chars = max(50, int(max_tokens * per_token * 0.9))

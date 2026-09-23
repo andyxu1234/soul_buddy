@@ -29,9 +29,9 @@ from typing import Callable, Optional
 from ..config import (
     COMPACT_TARGET_RATIO,
     COMPACT_TRIGGER_RATIO,
-    CONTEXT_WINDOW,
     RESERVE_FOR_OUTPUT,
     SUMMARY_INPUT_MAX_CHARS,
+    context_window,
 )
 from .tokens import estimate_tokens
 
@@ -86,15 +86,18 @@ def split_summary_response(text: str) -> tuple[str, str]:
     return summary, durable
 
 
-def needs_compact(tokens: int, provider: str, fixed_overhead: int = 0) -> bool:
-    """A13: per-provider window × trigger ratio, with output reserve.
+def needs_compact(tokens: int, model: str, fixed_overhead: int = 0) -> bool:
+    """A13: per-model window × trigger ratio, with output reserve.
 
-    `fixed_overhead` is the estimated token cost of system prompt + tool specs.
-    Counting only messages undercounts the real request when skills / subagent
-    index / MCP connector blocks are large, and the request would hit the
-    window before the messages-only threshold fires.
+    `model` is the model id (窗口按模型查表，见 config.context_window)，不是
+    provider 名。`fixed_overhead` is the estimated token cost of everything the
+    messages-only count cannot see: system prompt + tool specs **以及 wire 阶段才
+    展开的图片 ref**（按分辨率计费，见 agent._wire_ref_tokens）。Counting only
+    messages undercounts the real request when skills / subagent index / MCP
+    connector blocks are large, and the request would hit the window before the
+    messages-only threshold fires.
     """
-    window = CONTEXT_WINDOW.get(provider, CONTEXT_WINDOW["offline"])
+    window = context_window(model)
     return tokens + fixed_overhead + RESERVE_FOR_OUTPUT >= window * COMPACT_TRIGGER_RATIO
 
 
@@ -247,18 +250,18 @@ class CompactController:
         # rendered as a system-prompt segment, never touched by L1-L4.
         self.durable_block: str = ""
 
-    def compact_if_needed(self, messages: list[dict], provider: str,
+    def compact_if_needed(self, messages: list[dict], model: str,
                           fixed_overhead: int = 0) -> None:
         """In-place compaction. Mutates `messages` only if compaction happened."""
         if not messages:
             return
         tokens = _message_tokens(messages)
-        if not needs_compact(tokens, provider, fixed_overhead):
+        if not needs_compact(tokens, model, fixed_overhead):
             self.last_compacted = False
             return
         self.last_compacted = True
         self.compactions += 1
-        window = CONTEXT_WINDOW.get(provider, CONTEXT_WINDOW["offline"])
+        window = context_window(model)
         # Messages-only target, minus the fixed overhead. The floor keeps some
         # history even when the overhead alone is huge (offline provider).
         target = max(int(window * COMPACT_TARGET_RATIO) - fixed_overhead,
@@ -380,15 +383,15 @@ class CompactController:
 
     # --- hard-limit preflight (P0-4) -----------------------------------------
 
-    def check_hard_limit(self, messages: list[dict], provider: str,
+    def check_hard_limit(self, messages: list[dict], model: str,
                          fixed_overhead: int = 0) -> Optional[dict]:
-        """Would this request exceed the provider window even after compaction?
+        """Would this request exceed the model window even after compaction?
 
         Returns audit-safe over-limit info (no message bodies) or None.
         The caller decides whether to force_reduce and retry or stop the run
         with a controlled error instead of letting the provider 400.
         """
-        window = CONTEXT_WINDOW.get(provider, CONTEXT_WINDOW["offline"])
+        window = context_window(model)
         total = _message_tokens(messages) + fixed_overhead + RESERVE_FOR_OUTPUT
         if total < window:
             return None

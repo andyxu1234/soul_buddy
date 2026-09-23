@@ -120,13 +120,24 @@ class RunSignals:
 
 @dataclass
 class DimensionScore:
-    """One dimension's verdict. ``score is None`` means not applicable."""
+    """One dimension's verdict. ``score is None`` means not applicable.
+
+    ``confidence`` / ``position`` / ``levels`` are populated only by the
+    TypeSafe backend. They are additive: every existing consumer reads
+    ``score`` and keeps working, while a calibrated judge can additionally
+    expose *how sure* it was and how the probability mass was spread.
+    """
 
     id: str
     name: str
     score: int | None
     reason: str = ""
-    judge: str = "rule"             # rule | llm
+    judge: str = "rule"             # rule | llm | typesafe
+
+    # --- calibrated-judge extras (None for rule / plain-llm dimensions) -----
+    confidence: float | None = None
+    position: float | None = None   # raw probability-weighted level, pre-rounding
+    levels: dict[str, float] = field(default_factory=dict)
 
     @property
     def applicable(self) -> bool:
@@ -148,6 +159,13 @@ class RubricReport:
     safety_violation: bool = False
     detail: str = ""
     threshold: int = 0
+    # --- provenance (for per-model dashboards) ------------------------------
+    # ``model`` is the model *under evaluation* (the session provider that
+    # produced this run); ``judge_model`` is the model that scored Q5/Q6.
+    # Both empty for rule-only/legacy reports — the dashboard groups those
+    # under "unknown".
+    model: str = ""
+    judge_model: str = ""
 
     @property
     def failed_gating_dims(self) -> list[DimensionScore]:
@@ -159,9 +177,19 @@ class RubricReport:
         return [d for d in self.quality if d.applicable and (d.score or 0) <= 1]
 
     def _dim(self, d: DimensionScore) -> dict:
-        return {"id": d.id, "name": d.name, "score": d.score,
-                "reason": d.reason, "judge": d.judge,
-                "applicable": d.applicable}
+        out = {"id": d.id, "name": d.name, "score": d.score,
+               "reason": d.reason, "judge": d.judge,
+               "applicable": d.applicable}
+        # Only the calibrated backend fills these; keeping them out of the
+        # report for rule/uncalibrated dimensions keeps the JSON shapes that
+        # script/rubric_report.py and the docs already describe.
+        if d.confidence is not None:
+            out["confidence"] = d.confidence
+        if d.position is not None:
+            out["position"] = d.position
+        if d.levels:
+            out["levels"] = d.levels
+        return out
 
     def to_dict(self) -> dict:
         return {
@@ -176,6 +204,8 @@ class RubricReport:
             "retries_used": self.retries_used,
             "safety_violation": self.safety_violation,
             "detail": self.detail,
+            "model": self.model,
+            "judge_model": self.judge_model,
         }
 
     def summary_line(self) -> str:

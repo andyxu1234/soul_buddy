@@ -56,7 +56,7 @@ SoulBuddy 里是 `OpenAIChatProvider`(`providers/openai_chat.py`),DeepSeek 复�
 
 ```json
 {
-  "model": "deepseek-chat",
+  "model": "deepseek-flash",
   "messages": [
     {"role": "system", "content": "你是 SoulBuddy……"},
     {"role": "user", "content": "帮我看看这个报错"},
@@ -87,6 +87,17 @@ SoulBuddy 里是 `OpenAIChatProvider`(`providers/openai_chat.py`),DeepSeek 复�
 }
 ```
 
+> ⚠️ **DeepSeek 的模型名与思考开关**（2026-09 现行）：
+> 官方在售 id 是 `deepseek-flash`（= **DeepSeek-V4.1-Flash**，1M 上下文、**原生支持图像理解**）
+> 与 `deepseek-v4-pro`（V4-Pro，1M、不支持图像理解）。一个 model ID 兼顾对话与思考，
+> 靠请求体顶层的 `thinking: {"type": "enabled" | "disabled"}` 控制（**默认 `enabled`**），
+> 另可用 `reasoning_effort: low | high | max`（默认 `high`，V4-Pro 仅支持 `high`/`max`）调推理强度。
+> SoulBuddy 目前**不发送这两个字段**（`openai_chat.py` 的 `_kwargs()` 只拼 `model`/`messages`/`tools`），
+> 所以配 `deepseek-flash` 时思考模式恒为开启、推理强度恒为默认。
+> provider 侧对所有 DeepSeek 模型都按 `supports_images=True` 处理，因此用 `deepseek-v4-pro` 贴图会被 API 拒绝。
+> 旧名 `deepseek-v4-flash` 仍可调用但对应模型已下线（路由到 V4.1-Flash 并按 Flash 计费）；
+> `deepseek-chat` / `deepseek-reasoner` 已于 2026-07-24 停用。
+
 `messages` 四种 role 一张表看全:
 
 | role | 用途 | content 形态 |
@@ -107,6 +118,12 @@ SoulBuddy 里是 `OpenAIChatProvider`(`providers/openai_chat.py`),DeepSeek 复�
 ]}
 ```
 
+> 💰 图片按**分辨率**计费，与 base64 长度无关：Anthropic ≈ (w×h)/750，OpenAI 高细节 ≈ 85 + 170 × 512px 分块。
+> SoulBuddy 的 buffer 里只存轻引用（base64 在 wire 时才拼），所以 `estimate_tokens` 看不到图片 ——
+> `tokens.estimate_image_tokens()` 单独按尺寸估值（纯 stdlib 读文件头，不依赖 Pillow），
+> 由 `SoulAgent._wire_ref_tokens()` 计入压缩阈值与 `context_usage` 的 messages 分类；
+> 非视觉模型（`supports_images=False`）上图片会降级成一句提示，因此不计整图。
+
 ### 2.2 响应结构(非流式)
 
 SDK 返回 `ChatCompletion` pydantic 对象(结构上就是下面这个 JSON):
@@ -116,7 +133,7 @@ SDK 返回 `ChatCompletion` pydantic 对象(结构上就是下面这个 JSON):
   "id": "chatcmpl-123",
   "object": "chat.completion",
   "created": 1726000000,
-  "model": "deepseek-chat",
+  "model": "deepseek-flash",
   "choices": [{
     "index": 0,
     "message": {

@@ -83,6 +83,34 @@ def test_reasoning_of_openai_compatible_variants():
     assert _reasoning_of(m4) is None
 
 
+def test_key_hint_masks_the_credential():
+    """Logs must be able to tell two keys apart without leaking either."""
+    from soul_buddy.providers import _key_hint
+
+    assert _key_hint("") == "(empty)"
+    hint = _key_hint("sk-cwpkfwch5q5duxf9qhp2wp99ct8ehbx7x4atcr52olq4m1zs")
+    assert hint == "…m1zs(len=51)"
+    assert "cwpkfwch" not in hint          # the body never reaches the log
+    # a truncated paste is visible via the length
+    assert _key_hint("sk-cwp") != hint
+
+
+def test_provider_build_logs_the_credential_actually_in_play(caplog):
+    """Why this exists: .env held a valid key while a stale variable inherited
+    from a running IDE shadowed it (load_dotenv uses override=False). The only
+    symptom was a 401 deep in a warning. One log line names the key and endpoint.
+    """
+    from soul_buddy.providers import build_named_provider
+
+    settings = Settings(xiaomi_api_key="tp-cih" + "x" * 40 + "dbc1",
+                        xiaomi_base_url="https://api.xiaomimimo.com/v1")
+    with caplog.at_level("INFO", logger="soul_buddy.providers"):
+        build_named_provider(settings, "xiaomi")
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("…dbc1" in m and "api.xiaomimimo.com" in m for m in messages)
+
+
 def test_offline_script_reasoning_passthrough():
     # 离线脚本 JSON 支持 "reasoning" 字段,用于端到端回归。
     import json

@@ -152,7 +152,7 @@
 | ask 超时 | 300 s（每个请求独立计时） | BR-13 | 超时后 POST → 409（A17） |
 | 硬编码 worker 数 | 1；**同时 running 的 run ≤ 4** | BR-11 BR-34 | 超出 429（A19 → **B06 修订**）；session 数不限 |
 | token | 32 字节随机 + 一次性 + **60s 时效（从 READY 起算）** | BR-12 BR-23 BR-36 | 重放 401（A09 → **B11 修订**） |
-| compact 触发 | `window × 0.75` 触发，压到 `0.50` | **A13 新增** | 按 provider 窗口配置（DeepSeek 64k / Anthropic 200k / OpenAI 128k / offline 8k） |
+| compact 触发 | `window × 0.75` 触发，压到 `0.50` | **A13 新增** | 按**模型**窗口配置（deepseek-flash 1M / claude-sonnet-4 200k / gpt-4o 128k / Qwen3-8B 32k / offline 8k；未收录兜底 32k） |
 | 输出预留 | `RESERVE_FOR_OUTPUT = 4096` | **A13 新增** | 估算时计入 |
 | bash 超时 | 默认 60 s，上限 300 s | BR-26 | 超时 kill 进程树（A24） |
 | 权限记忆有效期 | 30 天 | BR-25 | 到期重新询问（A26） |
@@ -192,7 +192,7 @@
 |---|---|---|---|
 | Q11 | 达到 `MAX_TURNS` 时**已完成的部分副作用如何处置**？ | 前 39 轮已改 10 个文件，第 40 轮中止 | ✅ **A11 保留 + 告警 + 标记，不自动回滚**。理由：自动回滚需事务化文件操作，且 bash 副作用（跑测试/发请求）本就无法补偿，回滚语义不成立。实现：① `RunResult(truncated=True, reason="max_turns")`；② 前端**醒目告警条**：「已达 40 轮上限，已停止，已修改 N 个文件（可展开列表）」；③ 审计追加 `run_aborted`（含 `modified_files`）；④ 提供「撤销本次 run」按钮，仅覆盖 write/edit（依赖 A07 备份），bash 副作用不可撤销且 UI 明示；⑤ **第 32 轮（80%）发 `turn_budget_warning`** 让模型收尾。新增 BR-28 |
 | Q12 | `generate_summary` 调用模型**失败时如何降级**？ | 摘要失败是终止会话还是降级截断 | ✅ **A12 分级降级，绝不终止会话**：`generate_summary` 失败 → 记 `summary_failed` 审计 + 事件 → 回退 `prune_old_messages`（纯截断，**成对删除**）→ 若仍超预算 → 回退「system + 最近 K 轮」。任何情况下不得因压缩失败让 loop 崩掉（BR-19 扩展覆盖 compact） |
-| Q13 | compact 的**触发阈值**是多少？按哪个模型窗口算？ | 三家 provider 窗口不同 | ✅ **A13 按 provider 配置，取消全局常量**：`CONTEXT_WINDOW = {deepseek:64k, anthropic:200k, openai:128k, offline:8k}`；`COMPACT_TRIGGER_RATIO=0.75`、`COMPACT_TARGET_RATIO=0.50`、`RESERVE_FOR_OUTPUT=4096`。触发条件：`estimated_tokens + 4096 ≥ window × 0.75`。估算优先用 provider 返回的真实 `usage.input_tokens`，fallback 用启发式（见 A22/A23） |
+| Q13 | compact 的**触发阈值**是多少？按哪个模型窗口算？ | 各模型窗口差异极大（1M vs 32k） | ✅ **A13 按模型配置，取消全局常量**（2026-09 修订：由「按 provider」改为「按**模型名**」）：`CONTEXT_WINDOW = {deepseek-flash:1M, deepseek-v4-pro:1M, claude-sonnet-4:200k, gpt-4o:128k, Qwen/Qwen3-8B:32k, offline:8k}`，未收录模型回落 `DEFAULT_CONTEXT_WINDOW=32k`，统一由 `context_window(model)` 解析；`COMPACT_TRIGGER_RATIO=0.75`、`COMPACT_TARGET_RATIO=0.50`、`RESERVE_FOR_OUTPUT=4096`。触发条件：`estimated_tokens + overhead + 4096 ≥ window × 0.75`（overhead = system prompt + 工具定义）。估算优先用 provider 返回的真实 `usage.input_tokens`，fallback 用启发式（见 A22/A23） |
 | Q14 | externalize 的 50KB 是**字节还是字符**？ | 中文 UTF-8 差 3 倍 | ✅ **A14 字节（UTF-8 编码后长度），比较符 `>` 严格大于**：`len(content.encode("utf-8")) > 50 * 1024`。预览 2 KiB 同样按字节，且用 `content.encode()[:2048].decode(errors="ignore")` **按 UTF-8 边界截断**，禁止切半个多字节字符。全文统一改写为「50 KiB（UTF-8 字节）」 |
 | Q15 | externalize 落盘文件**何时清理**？ | `~/.soul_buddy` 无限增长 | ✅ **A15 恢复保留策略（裁剪版，不做 lease）**：① 位置 `<session>/tool-results/`；② 清理时机：进程启动 + 每 24h；③ 会话删除即删；④ **配额**：单会话 ≤ 200MB 或 ≤ 500 文件，全局 ≤ 2GB，超配额 **LRU 删最旧**；⑤ compact 把外部化内容摘要化后标记 `reclaimable`，下次清理删除；⑥ 清理动作全部写审计。新增 BR-24 |
 | Q16 | **多个并发 ask** 如何处理？ | 串行/并行、顺序、超时独立性 | ✅ **A16 串行单队列**：① 一次 `model_turn` 的多个 tool_call **逐个顺序处理**（工具本身也串行，避免写冲突与审计乱序）；② 同一时刻**仅 1 个待决 ask**，其余排队，前端按 FIFO 依次弹；③ 超时**独立计时**（各 300s），UI 只显示队首；④ `wait()` 发现 `call_id` 非队首 → **直接返回 DENY** 并记 `permission_out_of_order`（防死锁/错序）；⑤ 弹窗增加「拒绝本次 run 的后续同类请求」(`deny_rest`)，避免连续 20 次弹窗。新增 BR-27 |
@@ -207,7 +207,7 @@
 |---|---|---|---|
 | Q21 | `offline` provider 如何**脚本化返回多轮 tool_call**？ | 否则 loop 无法离线自动化 | ✅ **A21 采纳并扩展测试方契约（P0 必交付）**：`set_script(turns: list[ModelTurn \| Callable[[ProviderRequest], ModelTurn]])`，支持 callable 形式（便于断言"收到的 messages 中 tool_result 是否成对"）、`set_default(turn)` 定义脚本耗尽后的返回、支持 `SOUL_OFFLINE_SCRIPT=<path.json>` 从文件加载（便于手工复现）、耗尽时记 `script_exhausted` 供断言。新增 BR-29 |
 | Q22 | usage 的 token 数是**估算还是 API 返回值**？ | 断言口径需统一 | ✅ **A22 真实优先，估算兜底**：① 字段 `prompt_tokens` / `completion_tokens` / `total_tokens` / `estimated: bool` / `model` / `cost_usd`；② 优先用 provider 返回的真实 `usage`，缺失才估算并置 `estimated=true`；③ 成本按内置 `PRICING` 表（每 1M token 输入/输出单价，可在 `config.py` 覆盖），**未知模型 cost=null 不猜**；④ **测试只断言 `estimated` 标志与量级 > 0，不断言精确值** |
-| Q23 | **PyInstaller 打包后 tiktoken BPE 缓存**能否加载？ | 打包环境常失败 | ✅ **A23 默认换掉 tiktoken，消除打包风险**：① 默认改用**纯 Python 启发式估算**（中文按字符 ×1.5、英文按 `len/4` 的加权），阈值有 25% 余量，精度完全够用；② tiktoken 降级为**可选增强**，仅当 P1.5 Spike 验证 `--collect-data tiktoken` + `TIKTOKEN_CACHE_DIR` 可行才启用；③ Spike 必验项由「tiktoken 可用」改为「**token 估算在打包环境可用**」。TC-M11-002 相应改写 |
+| Q23 | **PyInstaller 打包后 tiktoken BPE 缓存**能否加载？ | 打包环境常失败 | ✅ **A23 默认换掉 tiktoken，消除打包风险**：① 默认改用**纯 Python 启发式估算**（中文按字符 ×1.0、ASCII 字母数字 ×0.25、ASCII 符号 ×1/3、emoji ×2.0；2026-09 按经验换算重标定），阈值有 25% 余量，精度完全够用；② tiktoken 降级为**可选增强**，仅当 P1.5 Spike 验证 `--collect-data tiktoken` + `TIKTOKEN_CACHE_DIR` 可行才启用；③ Spike 必验项由「tiktoken 可用」改为「**token 估算在打包环境可用**」。TC-M11-002 相应改写 |
 | Q24 | Windows bash 走 PowerShell 时**引号如何转义**？ | 复杂命令解析失败 | ✅ **A24 从根上消灭引号问题：禁用 `shell=True`，改用参数数组**：① 优先探测 Git Bash（`C:\Program Files\Git\bin\bash.exe`）→ `subprocess.run([bash, "-lc", cmd])`（bash 引号语义与模型训练语料一致）；② 无 Git Bash → `["powershell","-NoProfile","-NonInteractive","-Command", cmd]`，PowerShell 内字面单引号用两个单引号转义；③ **拒绝含换行的多行命令**；④ 输出解码 UTF-8 优先、失败回退 GBK、`errors="replace"`；⑤ 超时默认 60s（上限 300s），超时 kill 进程树。新增 BR-26 |
 | Q25 | `edit_file` **多处匹配**取第一个还是报错？ | 行为未定义 | ✅ **A25 报错，绝不猜**：① `edit_file(old, new, expected_count=1)`；② 匹配 0 处 → `OLD_STRING_NOT_FOUND`，返回文件前 20 行帮助模型定位；③ 匹配 > 1 处 → `AMBIGUOUS_MATCH`，返回匹配数与每处行号，**不修改文件**；④ 模型可显式传 `expected_count=N` 或 `replace_all=true` 表达意图。理由：静默取第一个会导致改错地方，属不可逆事故。新增 BR-22 |
 | Q26 | 权限记忆策略的**持久化位置与撤销方式**？ | 无法验证跨会话与误授权恢复 | ✅ **A26 收紧粒度并明确生命周期**：① 位置 `~/.soul_buddy/permissions.json`（**不进用户 workspace**，避免污染仓库、也避免被 agent 自己读改）；② 结构 `{version, rules:[{id, scope, pattern, action, created_at, created_by_session, expires_at}]}`；③ 粒度**仅目录级**，且**仅对 write/edit 生效，bash 类一律不记忆**（命令变体太多，误放行风险高）—— 修正原计划"始终允许该目录写操作"的模糊表述；④ **30 天过期**，到期重新询问；⑤ 撤销三入口：UI 设置页逐条删除 / `DELETE /api/v1/permissions/rules/{id}` / 直接编辑 json；⑥ 每次命中放行必写审计（含 `rule_id`）；⑦ hard_deny 与越界 DENY **永不进记忆**（INV-4）。新增 BR-25 |
@@ -437,7 +437,7 @@
 | RK-05 | 达到 MAX_TURNS 的副作用不可控（Q11） | 中 | 高 | **高** | 澄清处置策略 | ✅ **已关闭** A11：保留+告警+审计标记+可选撤销，不自动回滚（BR-28） |
 | RK-06 | 多 worker / reload 导致 SSE 静默失效 | 中 | 高 | 中 | 启动断言 + TP-M9-04 | ✅ **已关闭** D2/BR-11；补充并发 session ≤ 4（A19） |
 | RK-07 | 提示词注入引发越权动作（Q08） | 中 | 高 | **高** | 专项用例 TP-AI-04 | 🟡 **缓解** A08：权限层为唯一信任边界 + 信封包装 + 写操作必 ASK；**残余风险**：用户自身点"允许"仍会放行，靠弹窗展示命令全文降低 |
-| RK-08 | compact 阈值未定导致上下文超限 | 中 | 中 | 中 | 澄清 Q13 | ✅ **已关闭** A13：按 provider 窗口 × 0.75 触发，目标 0.50 |
+| RK-08 | compact 阈值未定导致上下文超限 | 中 | 中 | 中 | 澄清 Q13 | ✅ **已关闭** A13：按模型窗口 × 0.75 触发，目标 0.50 |
 | RK-09 | 需求仍在演进导致用例返工 | 高 | 中 | 中 | 用例按 BR 追溯，变更时按编号定位 | 🟢 **降低** 澄清已完成，BR 稳定在 30 条；后续变更须走 A 编号追加 |
 | RK-10 | AI 输出不确定性导致用例不稳定 | 高 | 中 | 中 | 统计指标替代精确断言；失败率阈值化 | 🟢 维持：A21 提供脚本化 offline，回归稳定性显著提升 |
 | RK-11 | 测试投入时间不足 | 中 | 中 | 中 | 接口自动化优先于 UI 自动化 | 🟢 维持：新增 12 条安全用例均为单测/接口层，成本低 |
@@ -545,7 +545,7 @@ offline.set_script([lambda req: ModelTurn(text=f"收到 {len(req.messages)} 条"
 | C-06 | 异步锁保护 audit 追加 | 并发写坏哈希链 |
 | C-07 | 子进程退出钩子（`taskkill /f /t`） | Windows 残留进程占端口 |
 | C-08 | externalize 文件清理或配额 | `~/.soul_buddy` 磁盘无限增长 |
-| C-09 | compact 阈值按 provider 上下文窗口配置 | 换模型后上下文超限 |
+| C-09 | compact 阈值按模型上下文窗口配置 | 换模型后上下文超限 |
 | C-10 | SSE generator 检测 `request.is_disconnected()` | 连接泄漏，句柄耗尽 |
 | C-11 | cookie 设 httpOnly + SameSite | token 泄漏到 JS |
 | C-12 | tiktoken 词表在打包环境的加载路径 | 打包后启动报找不到 BPE |

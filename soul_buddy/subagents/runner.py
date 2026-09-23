@@ -239,7 +239,9 @@ class SubAgentRunner:
                 return ("(sub-agent 达到时间上限,已停止)", True, turn - 1)
 
             # P1-9: 每轮 provider 调用前压缩,与主循环同语义(绝不 raise)。
-            compact.compact_if_needed(messages, provider.name)
+            # 窗口按模型名查表(一个平台可有多个模型),offline 退回 provider 名。
+            compact.compact_if_needed(
+                messages, getattr(provider, "model", "") or provider.name)
 
             tools_specs = tools.specs()
             # Defense-in-depth: ensure no orphaned tool_calls before the

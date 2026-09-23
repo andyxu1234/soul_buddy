@@ -623,7 +623,7 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    IN["messages + fixed_overhead<br/>（system+tools 的估算开销）"] --> T{"tokens + overhead + 4096<br/>≥ window × 0.75？<br/>（deepseek 64k / anthropic 200k /<br/>openai 128k / offline 8k）"}
+    IN["messages + fixed_overhead<br/>（system+tools 的估算开销）"] --> T{"tokens + overhead + 4096<br/>≥ window × 0.75？<br/>（窗口按模型名取：<br/>deepseek-flash 1M / claude-sonnet-4 200k /<br/>gpt-4o 128k / Qwen3-8B 32k / offline 8k）"}
     T -- 否 --> SKIP["原样返回"]
     T -- 是 --> L1["L1 截断超大 tool_result<br/>>4000 chars → 头部+省略标记（幂等）"]
     L1 --> L2["L2 去重：<br/>① 完全重复的 turn 组去重<br/>② 被后读取代的 read_file 结果<br/>替换为占位（保对不删块）"]

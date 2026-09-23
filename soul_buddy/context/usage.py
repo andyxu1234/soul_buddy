@@ -67,14 +67,14 @@ class ContextUsage:
 class ContextUsageCalculator:
     """旁路计算器 —— 任何输入都不崩, 崩了也返回零值."""
 
-    def __init__(self, provider_name: str):
-        from ..config import CONTEXT_WINDOW
-        self.window = CONTEXT_WINDOW.get(
-            provider_name, CONTEXT_WINDOW.get("offline", 8000))
+    def __init__(self, model: str):
+        from ..config import context_window
+        self.window = context_window(model)
 
     # ---------- 估算 ----------
     def calc(self, system: str, system_parts: dict,
-             messages: list[dict], tools_specs) -> ContextUsage:
+             messages: list[dict], tools_specs,
+             extra_messages_tokens: int = 0) -> ContextUsage:
         """估算分类别 token 用量.
 
         Args:
@@ -83,6 +83,10 @@ class ContextUsageCalculator:
                            {"role": "...", "memory": "...", "skills": "...", ...}
             messages:      对话历史 + 本轮 user message 列表
             tools_specs:  ToolSpec 列表
+            extra_messages_tokens: messages 里**纯文本估算看不到**的部分，计入
+                           `messages` 分类 —— 目前是 wire 阶段才展开的图片 ref
+                           （按分辨率计费，见 tokens.estimate_image_tokens）。由
+                           调用方判断模型是否支持图片后传入。
         """
         system = system or ""
         system_parts = system_parts or {}
@@ -93,7 +97,8 @@ class ContextUsageCalculator:
         skill_tokens = self._safe_estimate(system_parts.get("skills", ""), "skills")
         memory_tokens = self._safe_estimate(system_parts.get("memory", ""), "memory")
         connector_tokens = self._safe_estimate(system_parts.get("connectors", ""), "connectors")
-        msg_tokens = self._safe_estimate_messages(messages)
+        msg_tokens = (self._safe_estimate_messages(messages)
+                      + max(0, int(extra_messages_tokens or 0)))
         tools_tokens = self._safe_estimate_tools(tools_specs)
 
         # 纯 role prompt = 完整 system - 嵌在里面的 skills/memory/connectors

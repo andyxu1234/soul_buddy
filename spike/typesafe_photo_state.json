@@ -1,0 +1,32 @@
+{
+  "source": "studio ID photo supplied by the subject",
+  "photo_type": "formal identification photo, single colour background",
+  "subject": {
+    "framing": "head and shoulders; the head occupies roughly the upper half of the frame",
+    "pose": "front-facing, square to the camera, head level",
+    "expression": "neutral with a very slight smile, mouth closed",
+    "gaze": "directly into the lens",
+    "headwear": "none",
+    "hair": "short, dark, combed back neatly",
+    "eyewear": "thin rectangular dark frames",
+    "facial_hair": "none visible"
+  },
+  "wardrobe": {
+    "jacket": "dark suit jacket, black or very dark navy",
+    "shirt": "white, collar buttoned to the neck",
+    "tie": "blue and white diagonal stripe"
+  },
+  "lighting": {
+    "setup": "flat frontal studio light with minimal shadowing",
+    "effect": "the face is evenly lit; little modelling across cheekbone or jaw"
+  },
+  "background": {
+    "colour": "saturated medium blue",
+    "uniformity": "even, no gradient or visible texture"
+  },
+  "technical": {
+    "sharpness": "sharp and in focus",
+    "crop": "tight ID-photo crop, the shoulder line is partially cut",
+    "retouching": "skin appears lightly softened"
+  }
+}

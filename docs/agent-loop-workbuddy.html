@@ -438,7 +438,7 @@ stateDiagram-v2
 <tr><td>TURN_BUDGET_WARNING</td><td>32</td><td>80% 预算告警</td></tr>
 <tr><td>REPEAT_CALL_LIMIT</td><td>3</td><td>同一 (工具, 参数) 重复即拒绝，per-run 作用域</td></tr>
 <tr><td>FIRST_TURN_REASONING_MIN_LEN / MAX_RETRIES</td><td>20 / 2</td><td>首轮推理守卫</td></tr>
-<tr><td>CONTEXT_WINDOW</td><td>deepseek 64k / anthropic 200k / openai 128k / offline 8k</td><td>按 provider 取窗口</td></tr>
+<tr><td>CONTEXT_WINDOW</td><td>deepseek-flash 1M / claude-sonnet-4 200k / gpt-4o 128k / Qwen3-8B 32k / offline 8k（未收录模型兜底 32k）</td><td>按<strong>模型名</strong>取窗口（<code>context_window()</code>）</td></tr>
 <tr><td>COMPACT_TRIGGER / TARGET / RESERVE</td><td>0.75 / 0.50 / 4096</td><td>压缩触发、目标、输出预留</td></tr>
 <tr><td>keep_recent_turns</td><td>主 6 / 子代理 4</td><td>摘要保留最近组数</td></tr>
 <tr><td>EXTERNALIZE_THRESHOLD / PREVIEW</td><td>50 KiB / 2 KiB</td><td>输出外置化阈值与预览</td></tr>

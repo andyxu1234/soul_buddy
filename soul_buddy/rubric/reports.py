@@ -41,6 +41,33 @@ QUALITY_META = [
 THRESHOLD_COMPLETION = 0.80
 THRESHOLD_TOOL_SELECTION = 0.85
 
+# Reports written before provenance was recorded carry no ``model`` field.
+# Grouping them under a named bucket keeps the dashboard filter honest instead
+# of silently dropping them from the per-model comparison.
+UNKNOWN_MODEL = "unknown"
+
+
+def report_model(report: dict) -> str:
+    """The model *under evaluation* for one report body."""
+    return (report or {}).get("model") or UNKNOWN_MODEL
+
+
+def report_judge_model(report: dict) -> str:
+    """The model that scored Q5/Q6 for one report body."""
+    return (report or {}).get("judge_model") or UNKNOWN_MODEL
+
+
+def model_counts(rows: list[dict]) -> dict[str, int]:
+    """Model -> report count, over :func:`list_reports` rows (unfiltered).
+
+    Used by the dashboard to build the model filter, so it must be computed
+    from the *whole* set even when the summary itself is filtered.
+    """
+    counts: Counter[str] = Counter()
+    for row in rows:
+        counts[report_model(row.get("report", row))] += 1
+    return dict(counts)
+
 
 def _iter_report_files() -> list[Path]:
     """Every rubric JSON on disk, across both current and legacy layouts."""
@@ -95,6 +122,37 @@ def _score(report: dict, group: str, dim_id: str) -> int | None:
     return None
 
 
+def _model_stats(bodies: list[dict]) -> list[dict]:
+    """Per-model leaderboard: "how did each model perform".
+
+    One row per evaluated model with its own pass rate / mean total / degraded
+    count, plus which judge model(s) scored it — numbers are only comparable
+    across runs judged the same way, so the judge is part of the row.
+    """
+    grouped: dict[str, list[dict]] = {}
+    for r in bodies:
+        grouped.setdefault(report_model(r), []).append(r)
+
+    stats: list[dict] = []
+    for name, group in grouped.items():
+        n = len(group)
+        passed = sum(1 for g in group if g.get("passed"))
+        totals = [g.get("total") for g in group
+                  if isinstance(g.get("total"), int)]
+        judges: Counter[str] = Counter(report_judge_model(g) for g in group)
+        stats.append({
+            "model": name,
+            "runs": n,
+            "passed": passed,
+            "pass_rate": (passed / n) if n else None,
+            "average_total": (sum(totals) / len(totals)) if totals else None,
+            "degraded": sum(1 for g in group if g.get("degraded")),
+            "judge_models": dict(judges),
+        })
+    stats.sort(key=lambda s: (-s["runs"], s["model"]))
+    return stats
+
+
 def summarise(reports: list[dict]) -> dict:
     """Aggregate reports into the §7.3 metric set.
 
@@ -146,6 +204,10 @@ def summarise(reports: list[dict]) -> dict:
         "g1_failures": g1_fail,
         "degraded": degraded,
         "modes": dict(modes),
+        # --- provenance split (per-model dashboard filter) -------------------
+        "models": dict(Counter(report_model(r) for r in bodies)),
+        "judge_models": dict(Counter(report_judge_model(r) for r in bodies)),
+        "model_stats": _model_stats(bodies),
         "dimension_averages": averages,
         "dimension_counts": counts,
         "dimension_meta": {"gating": GATING_META, "quality": QUALITY_META},

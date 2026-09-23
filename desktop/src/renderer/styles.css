@@ -379,6 +379,76 @@
   margin: 12px 0 0; line-height: 1.6;
 }
 
+/* ---------- 0. 模型筛选条 ---------- */
+.rb-filterbar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--bd-subtle);
+  border-radius: var(--r-md);
+}
+.rb-filterbar-label {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+  margin-right: 4px;
+}
+.rb-filterbar-judge {
+  margin-left: auto;
+  font-size: 11px; color: var(--fg-tertiary);
+}
+.rb-chip em {
+  font-style: normal;
+  margin-left: 5px;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.rb-chip.active em { color: var(--fg-secondary); }
+
+/* ---------- 3b. 模型表现 ---------- */
+.rb-models {
+  border: 1px solid var(--bd-subtle);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+.rb-model-head, .rb-model-row {
+  display: grid;
+  grid-template-columns: 1.4fr 60px 76px 76px 56px 1.6fr;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+}
+.rb-model-head {
+  font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--bd-subtle);
+}
+.rb-model-row {
+  font-size: 12px;
+  border-bottom: 1px solid var(--bd-subtle);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.rb-model-row:last-child { border-bottom: none; }
+.rb-model-row:hover { background: var(--bg-hover); }
+.rb-model-row.active { background: var(--bg-active); }
+.rb-model-name {
+  font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rb-model-num { font-variant-numeric: tabular-nums; color: var(--fg-secondary); }
+.rb-model-num.ok { color: var(--ok); font-weight: 600; }
+.rb-model-num.warn { color: var(--warn); font-weight: 600; }
+.rb-model-num.danger { color: var(--danger); font-weight: 600; }
+.rb-model-judge {
+  font-size: 11px; color: var(--fg-tertiary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 /* ---------- 4. 运行明细 ---------- */
 .rb-filter { margin-left: auto; display: flex; gap: 6px; }
 .rb-chip {
@@ -425,7 +495,7 @@
 }
 .rb-thead, .rb-trow {
   display: grid;
-  grid-template-columns: 92px 90px 56px 44px 44px 44px 1fr 28px;
+  grid-template-columns: 92px 84px 52px 38px 38px 38px 116px 1fr 28px;
   align-items: center;
   gap: 8px;
   padding: 9px 14px;
@@ -455,6 +525,10 @@
   display: flex; align-items: center; gap: 6px;
   font-size: 11px; color: var(--fg-tertiary);
   min-width: 0;
+}
+.rb-t-model {
+  font-size: 11px; color: var(--fg-tertiary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .rb-verdict {
@@ -854,3 +928,61 @@
   border-radius: var(--r-md);
   box-shadow: var(--sh-lg);
 }
+
+/* ---- Model selector：完整显示模型名（不省略、不换行）-------------------------
+   名称较长（如 Deepseek-V4.1-Flash），默认的 max-width:90px 会截断成 "…"，
+   而 popover 的可用宽度受 .model-dropdown（很窄）限制，会让选项折成两行。
+   放在文件末尾，覆盖上面压缩块里的同名规则。 */
+.model-label {
+  max-width: none;
+  white-space: nowrap;
+}
+.model-option {
+  white-space: nowrap;
+}
+.model-popover {
+  width: max-content;
+}
+
+/* ---- 等待首个 token 的占位（ChatPanel）---------------------------------------
+   用户发完消息到模型吐出第一个字之间，消息流原本完全空白，长等待时看起来像
+   卡死。这里给一段与流式答复同构的 assistant 行：同样的头像与角色名，加三个
+   呼吸点、状态词、以及已等待时长（复用 ChatPanel 的 elapsed，与顶栏同源，
+   所以两处数字永远一致）。 */
+.thinking {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 1px 0 2px;
+  font-size: 13px;
+  color: var(--fg-tertiary);
+  animation: fadeIn 0.18s ease-out;
+}
+.thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.thinking-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--brand);
+  animation: thinkDot 1.25s ease-in-out infinite;
+}
+.thinking-dots i:nth-child(2) { animation-delay: 0.16s; }
+.thinking-dots i:nth-child(3) { animation-delay: 0.32s; }
+.thinking-elapsed {
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+@keyframes thinkDot {
+  0%, 55%, 100% { opacity: 0.25; transform: translateY(0); }
+  28%           { opacity: 1;    transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* 呼吸点退化为静止的实心点，不消失——等待状态仍然看得出来 */
+  .thinking { animation: none; }
+  .thinking-dots i { animation: none; opacity: 0.7; }
+}
+

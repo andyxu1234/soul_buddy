@@ -540,6 +540,31 @@ export function ChatPanel({
                 </div>
               </div>
             ) : null}
+            {/* 等首个 token 的占位。发完消息到这里之间消息流原本完全空白，
+                长等待（模型在思考 / 首 token 迟到）时看起来像卡死。结构与上面的
+                流式答复一致：同一头像 + 角色名，避免出现两种"助手"外观。
+                仅在对模型的真实等待里出现：已有流式文本/思考、或正等用户授权时都不显示。 */}
+            {running && !streamText && !streamReasoning && perms.length === 0 && (
+              <div className="msg assistant">
+                <div className="msg-inner">
+                  <div className="row">
+                    <div className="avatar">
+                      <img src="/SoulBuddy.png" alt="SoulBuddy" width={32} height={32} style={{borderRadius:'50%'}} />
+                    </div>
+                    <div className="body-wrap">
+                      <div className="role-name">{agentName}</div>
+                      <div className="thinking">
+                        <span className="thinking-dots" aria-hidden="true">
+                          <i /><i /><i />
+                        </span>
+                        <span>思考中</span>
+                        {elapsed && <span className="thinking-elapsed">· {elapsed}</span>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -775,7 +800,8 @@ function useAgentName(session: SessionRecord | null): string {
 
 function providerName(id: string): string {
   const map: Record<string, string> = {
-    deepseek: 'DeepSeek',
+    deepseek: 'Deepseek-V4.1-Flash',
+    siliconflow: 'Qwen/Qwen3-8B',
     anthropic: 'Claude',
     'openai-chat': 'GPT',
     offline: '离线 Agent',
@@ -784,7 +810,7 @@ function providerName(id: string): string {
 }
 
 function providerLabel(providers: ProviderOption[], current?: string | null): string {
-  return providers.find((p) => p.id === current)?.label || 'Auto'
+  return providers.find((p) => p.id === current)?.label || 'Deepseek-V4.1-Flash'
 }
 
 function basename(p: string): string {

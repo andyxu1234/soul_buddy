@@ -1,8 +1,20 @@
 """LLM-as-judge for the subjective quality dimensions (Q5 / Q6).
 
-Hard rules:
-  * runs on a worker thread — a synchronous provider call on the event loop
-    would stall SSE and trip the Electron watchdog (C-04);
+Two interchangeable measurement backends, selected by ``RubricPolicy``:
+
+  * ``llm`` (default) — the provider is asked to emit
+    ``{"scores": [{"id": "Q5", "score": 2}]}`` and the reply is parsed strictly;
+  * ``typesafe`` — ``api.typesafe.ai`` returns a calibrated probability
+    distribution over the *same* anchor table plus a ``confidence``, so a
+    judgement that carries no information can be reported as not-applicable
+    instead of being averaged in as if it were a measurement.
+
+Both walk the identical anchor tables and see the identical material
+(``_materials``); only the plumbing differs.
+
+Hard rules (unchanged):
+  * the provider call runs on a worker thread — a synchronous provider call on
+    the event loop would stall SSE and trip the Electron watchdog (C-04);
   * strict JSON only — an unparseable answer degrades to not-applicable rather
     than being guessed at;
   * never raises (INV-20).
@@ -15,6 +27,7 @@ import logging
 import anyio
 
 from ..providers.base import Provider, ProviderRequest
+from . import typesafe
 from .model import DimensionScore, RunSignals
 from .policy import LLM_DIMENSIONS, QUALITY_NAMES, RubricPolicy, render_anchors
 
@@ -63,13 +76,27 @@ def _clip(text: str, limit: int) -> str:
     return text[:limit] + f"\n…（已截断，原文 {len(text)} 字符）"
 
 
+def _materials(sig: RunSignals, limit: int) -> dict[str, str]:
+    """The three pieces of evidence both judge backends consume.
+
+    Shared on purpose: switching backends must not change *what the judge is
+    shown*, only how its answer comes back. Otherwise a comparison between the
+    two backends would be measuring the prompt, not the backend.
+    """
+    return {
+        "task": (sig.user_text or "(未记录任务原文)").strip(),
+        "diff": (_clip(sig.diff_text, limit) if sig.diff_text.strip()
+                 else "（本次未改动文件）"),
+        "answer": (sig.final_text or "(空)").strip(),
+    }
+
+
 def build_prompt(sig: RunSignals, dims: list[str], limit: int) -> str:
-    diff = (_clip(sig.diff_text, limit) if sig.diff_text.strip()
-            else "（本次未改动文件）")
+    materials = _materials(sig, limit)
     return _TEMPLATE.format(
-        task=(sig.user_text or "(未记录任务原文)").strip(),
-        diff=diff,
-        answer=(sig.final_text or "(空)").strip(),
+        task=materials["task"],
+        diff=materials["diff"],
+        answer=materials["answer"],
         anchors=render_anchors(tuple(dims)),
         dims=", ".join(dims),
     )
@@ -107,19 +134,11 @@ def parse_scores(raw: str) -> dict[str, tuple[int | None, str]]:
     return out
 
 
-async def evaluate_quality_by_llm(
-    sig: RunSignals, provider: Provider, policy: RubricPolicy
+async def _judge_with_provider(
+    sig: RunSignals, dims: list[str], policy: RubricPolicy, provider: Provider
 ) -> tuple[list[DimensionScore], bool]:
-    """Return ``(scores, degraded)``.
-
-    ``degraded=True`` means the LLM path did not contribute and the caller
-    should present the rule-based scores as the whole picture.
-    """
-    dims = _wanted_dimensions(sig)
-    if not dims:
-        return [], False
-
-    if not policy.llm_judge:
+    """Original path: the provider emits JSON, parsed strictly."""
+    if provider is None:
         return [], True
 
     # A provider that is not backed by a real model (the offline provider) can
@@ -136,11 +155,31 @@ async def evaluate_quality_by_llm(
         system=_SYSTEM,
         messages=[{"role": "user", "content": prompt}],
         tools=[],
-        max_tokens=700,
+        # Must fit a thinking model's reasoning + the JSON answer; a tight
+        # budget makes it answer with empty content (see policy.judge_max_tokens).
+        max_tokens=policy.judge_max_tokens,
+        # Scoring is mechanical: ask a thinking judge to skip its chain of
+        # thought. Measured on xiaomi/mimo-v2.5 this is ~1.5s vs ~44s, and it
+        # removes the risk of reasoning eating the whole output budget. Providers
+        # without such a switch leave this None and behave as before.
+        extra_body=getattr(provider, "thinking_off_extra_body", None),
     )
 
+    # Bound the call: a thinking model can spend minutes on a scoring prompt, and
+    # the caller holds the final message + run_finished until we return (the UI
+    # would sit on "运行中" long after the answer is visible). `judge_timeout=0`
+    # means unbounded. `abandon_on_cancel=True` is required for the bound to
+    # actually fire: with the default the host task ignores cancellation until
+    # the worker thread returns, which is exactly the stall we are removing.
+    timeout = float(getattr(policy, "judge_timeout", 0) or 0) or None
     try:
-        turn = await anyio.to_thread.run_sync(provider.create, req)
+        with anyio.move_on_after(timeout) as scope:
+            turn = await anyio.to_thread.run_sync(
+                provider.create, req, abandon_on_cancel=True)
+        if scope.cancelled_caught:
+            log.warning("rubric judge exceeded %.1fs, degrading to rules only",
+                        timeout or 0.0)
+            return [], True
         parsed = parse_scores(getattr(turn, "text", "") or "")
     except Exception as exc:
         # INV-20: the rubric must never become an availability single point.
@@ -161,3 +200,116 @@ async def evaluate_quality_by_llm(
     # degraded, so the caller can label the report accordingly.
     degraded = any(s.score is None for s in scores)
     return scores, degraded
+
+
+def _verdict_to_score(dim_id: str, verdict: typesafe.Verdict,
+                      policy: RubricPolicy) -> DimensionScore:
+    """Turn a calibrated verdict into the dimension the report consumes.
+
+    The ``reason`` text is the **matched anchor's own wording**, not a summary
+    the model invented. Two payoffs: ``render_feedback`` then points the retry
+    at a documented rubric level, and that text cannot drift away from the
+    rubric because it *is* the rubric.
+    """
+    levels = verdict.probabilities
+    top = max(levels) if levels else verdict.level
+    score = DimensionScore(
+        id=dim_id,
+        name=QUALITY_NAMES.get(dim_id, dim_id),
+        score=verdict.level,
+        judge="typesafe",
+        confidence=verdict.confidence,
+        position=verdict.position,
+        levels={str(k): float(v) for k, v in sorted(levels.items())},
+    )
+
+    if verdict.confidence < policy.typesafe_min_confidence:
+        # Reporting the rounded position here would launder a coin flip into a
+        # measurement, and ``aggregate`` would spend its weight on it. Say so
+        # instead, and let the dimension drop out as not-applicable.
+        #
+        # Note this fires rarely in practice: measured confidence runs at
+        # 0.55-0.98 across material of very different quality (see
+        # spike/typesafe_confidence_dist.py), so treat the threshold as a floor
+        # against total collapse rather than a routine quality filter.
+        spread = "、".join(f"{lvl}级 {p:.2f}" for lvl, p in sorted(levels.items()))
+        score.score = None
+        score.reason = (
+            f"TypeSafe 判定不可采信：置信度 {verdict.confidence:.2f} 低于阈值 "
+            f"{policy.typesafe_min_confidence:.2f}"
+            f"（位置 {verdict.position:.2f}/{top}，概率分散于 {spread}）")
+        return score
+
+    anchor = typesafe.level_text(dim_id, verdict.level)
+    score.reason = (f"{anchor}（TypeSafe 位置 {verdict.position:.2f}/{top}，"
+                    f"置信度 {verdict.confidence:.2f}）")
+    return score
+
+
+async def _judge_with_typesafe(
+    sig: RunSignals, dims: list[str], policy: RubricPolicy
+) -> list[DimensionScore] | None:
+    """Judge with TypeSafe. ``None`` means no measurement was obtained.
+
+    That is deliberately distinct from a *low-confidence* verdict: the latter is
+    a successful measurement that says "do not trust this", so retrying it
+    against the provider judge would just spend tokens for a worse-calibrated
+    answer. Only an unavailable backend is worth falling back for.
+    """
+    client = typesafe.client_from_policy(policy)
+    if client is None:
+        log.info("judge backend is typesafe but no API key is configured")
+        return None
+
+    try:
+        questions = typesafe.build_questions(dims)
+        response = await client.ask(
+            state=typesafe.build_state(**_materials(sig, policy.judge_diff_max_chars)),
+            questions=questions)
+        verdicts = typesafe.parse_verdicts(response, dims)
+    except Exception as exc:
+        # INV-20: never raise out of the rubric.
+        log.warning("typesafe judge unavailable: %s", exc)
+        return None
+
+    scores: list[DimensionScore] = []
+    for did in dims:
+        verdict = verdicts.get(did)
+        if verdict is None:
+            scores.append(DimensionScore(
+                id=did, name=QUALITY_NAMES.get(did, did), score=None,
+                judge="typesafe", reason="TypeSafe 未返回该维度"))
+        else:
+            scores.append(_verdict_to_score(did, verdict, policy))
+    return scores
+
+
+async def evaluate_quality_by_llm(
+    sig: RunSignals, provider: Provider, policy: RubricPolicy
+) -> tuple[list[DimensionScore], bool]:
+    """Return ``(scores, degraded)``.
+
+    ``degraded=True`` means the judge path did not contribute and the caller
+    should present the rule-based scores as the whole picture.
+
+    ``policy.judge_backend`` selects the measurement; ``policy.llm_judge`` is
+    the master switch over both, since either one spends tokens.
+    """
+    dims = _wanted_dimensions(sig)
+    if not dims:
+        return [], False
+
+    if not policy.llm_judge:
+        return [], True
+
+    if policy.uses_typesafe:
+        scores = await _judge_with_typesafe(sig, dims, policy)
+        if scores is not None:
+            # A low-confidence verdict has already nulled its score, which is
+            # exactly the "did not contribute" signal the caller expects.
+            return scores, any(s.score is None for s in scores)
+        if not policy.typesafe_fallback_to_llm:
+            return [], True
+        log.info("falling back to the provider judge after TypeSafe failed")
+
+    return await _judge_with_provider(sig, dims, policy, provider)

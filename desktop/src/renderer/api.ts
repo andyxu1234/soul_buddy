@@ -39,8 +39,8 @@ interface SoulApi {
   deleteKbDocument: (kbId: string, docId: string) => Promise<unknown>
   reindexKbDocument: (kbId: string, docId: string) => Promise<unknown>
   kbSearch: (query: string, kbIds?: string[], topK?: number) => Promise<unknown>
-  listRubricReports: (limit?: number, offset?: number, mode?: string) => Promise<unknown>
-  getRubricSummary: () => Promise<unknown>
+  listRubricReports: (limit?: number, offset?: number, mode?: string, model?: string) => Promise<unknown>
+  getRubricSummary: (model?: string) => Promise<unknown>
   getTracingStatus: () => Promise<unknown>
 }
 
@@ -192,15 +192,16 @@ export const api = {
       count: number
     }>,
   // Runtime rubric (P6): persisted reports + aggregated §7.3 dashboard metrics
-  listRubricReports: (limit?: number, offset?: number, mode?: string) =>
-    getSoul().listRubricReports(limit, offset, mode) as Promise<{
+  listRubricReports: (limit?: number, offset?: number, mode?: string, model?: string) =>
+    getSoul().listRubricReports(limit, offset, mode, model) as Promise<{
       reports: RubricReportRow[]
       count: number
       config_mode: string
       enabled: boolean
+      config_judge_provider: string
     }>,
-  getRubricSummary: () =>
-    getSoul().getRubricSummary() as Promise<RubricSummary>,
+  getRubricSummary: (model?: string) =>
+    getSoul().getRubricSummary(model) as Promise<RubricSummary>,
   getTracingStatus: () =>
     getSoul().getTracingStatus() as Promise<TracingStatus>,
 }
@@ -257,8 +258,12 @@ export interface RubricDimension {
   /** gating: 1 pass / 0 fail; quality: 0-3; null = not applicable */
   score: number | null
   reason: string
-  judge: 'rule' | 'llm'
+  judge: 'rule' | 'llm' | 'typesafe'
   applicable: boolean
+  /** Calibrated-judge extras (typesafe backend only) */
+  confidence?: number
+  position?: number
+  levels?: Record<string, number>
 }
 
 /** A single run's rubric report (body of `<request_id>.json`). */
@@ -274,6 +279,21 @@ export interface RubricResult {
   retries_used: number
   safety_violation: boolean
   detail: string
+  /** 被测模型（产生该次运行的 session provider model） */
+  model?: string
+  /** 打分模型（LLM judge 所用模型） */
+  judge_model?: string
+}
+
+/** Per-model aggregation for the dashboard leaderboard. */
+export interface RubricModelStat {
+  model: string
+  runs: number
+  passed: number
+  pass_rate: number | null
+  average_total: number | null
+  degraded: number
+  judge_models: Record<string, number>
 }
 
 /** A report plus the session context the API attaches for grouping. */
@@ -298,6 +318,16 @@ export interface RubricSummary {
   g1_failures: number
   degraded: number
   modes: Record<string, number>
+  /** 被测模型 -> 报告数（随筛选变化） */
+  models: Record<string, number>
+  /** 打分模型 -> 报告数 */
+  judge_models: Record<string, number>
+  /** 每个被测模型的通过率 / 平均分排行 */
+  model_stats: RubricModelStat[]
+  /** 全量可选被测模型（不随筛选变化），用于渲染筛选器 */
+  available_models: Array<{ model: string; runs: number }>
+  /** 当前生效的模型筛选（空字符串 = 全部） */
+  filter_model: string
   dimension_averages: Record<string, number>
   dimension_counts: Record<string, number>
   dimension_meta: {
@@ -307,6 +337,8 @@ export interface RubricSummary {
   thresholds: { completion: number; tool_selection: number }
   config_mode: string
   enabled: boolean
+  /** 配置里固定的 judge provider 名（空 = 复用会话 provider） */
+  config_judge_provider: string
 }
 
 /** Effective LangSmith tracing configuration (key is never sent). */

@@ -84,6 +84,49 @@ def test_openai_wire_converts_ref_to_image_url(tmp_path):
     assert base64.b64decode(url.split(",", 1)[1]) == PNG_BYTES
 
 
+def test_openai_wire_text_only_model_degrades_to_note(tmp_path):
+    """A non-VLM rejects the whole request, so image refs become text.
+
+    Regression: SiliconFlow + Qwen/Qwen3-8B returned
+    `400 code 20041 The model is not a VLM` on a *text-only* prompt, because
+    the replayed history still carried an older screenshot.
+    """
+    p = tmp_path / "a.png"
+    p.write_bytes(PNG_BYTES)
+    msgs = [{"role": "user", "content": [
+        {"type": "text", "text": "你好"},
+        {"type": "image", "path": str(p), "media_type": "image/png",
+         "name": "shot.png"},
+    ]}]
+    wire = oai_wire(msgs, supports_images=False)
+    part = wire[0]["content"][1]
+    assert part["type"] == "text"
+    assert "不支持图片" in part["text"] and "shot.png" in part["text"]
+    # the in-memory buffer keeps the ref: switching to a VL model restores it
+    assert msgs[0]["content"][1]["type"] == "image"
+
+
+def test_siliconflow_vision_detection():
+    from soul_buddy.providers.siliconflow import model_sees_images
+
+    assert not model_sees_images("Qwen/Qwen3-8B")
+    assert not model_sees_images("deepseek-ai/DeepSeek-V3")
+    assert not model_sees_images("")
+    assert model_sees_images("Qwen/Qwen2.5-VL-32B-Instruct")
+    assert model_sees_images("Qwen/Qwen3-VL-8B")
+    assert model_sees_images("THUDM/glm-4v-9b")
+    assert model_sees_images("OpenGVLab/InternVL2-8B")
+
+
+def test_siliconflow_provider_flags_text_only_model():
+    from soul_buddy.providers.siliconflow import SiliconFlowProvider
+
+    text_only = SiliconFlowProvider(api_key="test", model="Qwen/Qwen3-8B")
+    assert text_only.supports_images is False
+    vl = SiliconFlowProvider(api_key="test", model="Qwen/Qwen2.5-VL-32B-Instruct")
+    assert vl.supports_images is True
+
+
 # --- storage ----------------------------------------------------------------
 
 def test_save_upload_and_traversal_guard():
@@ -211,6 +254,72 @@ def test_run_with_images_roundtrip(client):
             for b in m["content"]
             if isinstance(b, dict) and b.get("type") == "image"]
     assert refs and Path(refs[0]["path"]).read_bytes() == PNG_BYTES
+
+
+# --- images count toward the context budget -----------------------------------
+# PNG_BYTES 是 1×1（估算会落到 85 token 的下限），这里造一张 1024×1024 的头，
+# 让「图片确实被计入 context_usage」这件事有个可断言的量级。
+BIG_PNG = (b"\x89PNG\r\n\x1a\n" + (13).to_bytes(4, "big") + b"IHDR"
+           + (1024).to_bytes(4, "big") + (1024).to_bytes(4, "big")
+           + b"\x08\x06\x00\x00\x00")
+
+
+def _image_ref(storage, session, meta) -> dict:
+    return {"type": "image", "media_type": "image/png", "name": meta["name"],
+            "size": meta["size"], "file": meta["file"],
+            "path": str(storage._session_dir(session.id, session.workspace_root)
+                        / "uploads" / meta["file"])}
+
+
+class _UsageCapture:
+    """收集 context_usage 事件（`publish(session_id, event)`）。"""
+
+    def __init__(self):
+        self.usage = None
+
+    async def publish(self, _session_id, ev):
+        if getattr(ev, "type", None) == "context_usage":
+            self.usage = dict(ev.data)
+
+
+def test_context_usage_counts_image_refs(make_agent):
+    """1024×1024 截图 ≈ 1398 token，必须计入 context_usage 的 messages 分类。
+
+    回归：图片在 buffer 里只是轻引用，纯文本估算看不到它，压缩阈值与用量统计
+    都会低估。
+    """
+    cap = _UsageCapture()
+    agent, session, storage = make_agent(
+        script=[ModelTurn(text="看完了")], events=cap)
+    meta = storage.save_upload(session.id, session.workspace_root,
+                               "shot.png", "image/png", BIG_PNG)
+    asyncio.run(agent.run(session, "看图", object(),
+                          images=[_image_ref(storage, session, meta)]))
+
+    assert cap.usage is not None, "context_usage 事件没发出来"
+    assert cap.usage["messages"] >= round(1024 * 1024 / 750), cap.usage
+
+
+def test_wire_ref_tokens_skipped_for_non_vision_model(make_agent):
+    """非视觉模型上图片会被降级成一句提示，不能按整图计费。
+
+    否则 Qwen3-8B 这类纯文本模型贴几张图就会把估算顶到窗口上，误触压缩、
+    甚至让硬上限预检直接终止 run。
+    """
+    class _NoVision(OfflineProvider):
+        supports_images = False
+
+    agent, session, storage = make_agent(provider=_NoVision())
+    agent.provider.set_script([ModelTurn(text="ok")])
+    meta = storage.save_upload(session.id, session.workspace_root,
+                               "shot.png", "image/png", BIG_PNG)
+    msgs = [{"role": "user", "content": [_image_ref(storage, session, meta)]}]
+
+    assert agent._wire_ref_tokens(msgs) == 0
+    agent.provider.supports_images = True
+    assert agent._wire_ref_tokens(msgs) == round(1024 * 1024 / 750)
+    # 没有图片时任何 provider 都是 0，且不读盘
+    assert agent._wire_ref_tokens([{"role": "user", "content": "纯文本"}]) == 0
 
 
 def test_run_rejects_bad_mime(client):

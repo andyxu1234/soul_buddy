@@ -2,7 +2,7 @@
 
 > 代码包：`soul_buddy/context/compact.py`（核心）+ `summary.py` / `tokens.py` / `usage.py`
 > 关联模块：[10-context.md](./10-context.md)（M7 上下文管理）· [06-agent.md](./06-agent.md)（M2 主循环）
-> 关联条款：A12（失败降级）· A13（按 provider 阈值）· A23（启发式 token）· BR-19（禁止异常穿透）· INV-5（tool_use/tool_result 成对）
+> 关联条款：A12（失败降级）· A13（按模型窗口阈值）· A23（启发式 token）· BR-19（禁止异常穿透）· INV-5（tool_use/tool_result 成对）
 > 状态：🟢 已实现，行号以当前代码为准
 
 ---
@@ -27,11 +27,11 @@
 |---|---|---|
 | `context/compact.py` | `CompactController`、`needs_compact`、`_group`、`_supersede_old_reads`、`build_summary_prompt`、`split_summary_response` | 压缩控制器 + 分层管线 + 触发判定 + 降级链 + 硬上限预检 |
 | `context/summary.py` | `make_summary_provider(provider)` | 把 Provider 包装成同步 `Callable[[str], str]`，供 L4 摘要调用 |
-| `context/tokens.py` | `estimate_tokens` / `estimate_messages` | 启发式 token 估算（CJK×1.5、ASCII×0.25，无 tiktoken 依赖） |
+| `context/tokens.py` | `estimate_tokens` / `estimate_messages` / `estimate_image_tokens` | 启发式 token 估算（中文 ×1.0、ASCII 字母数字 ×0.25、ASCII 符号 ×1/3、emoji ×2.0，无 tiktoken 依赖）；图片按**分辨率**另计（`max(85, w×h/750)`） |
 | `context/usage.py` | `ContextUsageCalculator` / `ContextUsage` | 旁路用量分类估算 + 官方 `prompt_tokens` 校准；`_fixed_overhead` 复用它 |
 | `context/__init__.py` | `ContextLayer` / `build_context_layer` | 门面；注册 `durable` system prompt 段（P1-7） |
 | `agent.py` | `run()` 主循环、`_fixed_overhead` | 每轮调用 `compact_if_needed` → `check_hard_limit` → `force_reduce` |
-| `subagents/runner.py` | P1-9 独立 `CompactController(keep_recent_turns=4)` | 子代理共享同一 provider 窗口，历史下限更小 |
+| `subagents/runner.py` | P1-9 独立 `CompactController(keep_recent_turns=4)` | 子代理共享同一**模型**窗口，历史下限更小 |
 | `api/runtime.py` | `build_context_layer(summary_provider=make_summary_provider(provider), ...)` | 生产 wiring：把 L4 真正接上当前会话的 provider |
 
 ---
@@ -39,11 +39,23 @@
 ## 3. 配置常量（`config.py`）
 
 ```python
+# 键是「模型名」而不是 provider 名：一个平台挂多个模型，窗口各不相同。
+# 查表统一走 context_window(model)：精确命中 → 前缀匹配 → DEFAULT_CONTEXT_WINDOW。
+DEFAULT_CONTEXT_WINDOW = 32_000
+
 CONTEXT_WINDOW = {
-    "deepseek": 64_000,
-    "anthropic": 200_000,
-    "openai": 128_000,
-    "offline": 8_000,          # 未命中时回落（见 needs_compact）
+    # DeepSeek：在售官方 id，都是 1M（deepseek-flash = DeepSeek-V4.1-Flash）
+    "deepseek-flash": 1_000_000,
+    "deepseek-v4-pro": 1_000_000,
+    # 旧名 / 非官方写法（仍可调用或已停用；保留只为让存量 env 拿到正确窗口）
+    "deepseek-v4-flash": 1_000_000,
+    "deepseek-v4.1-flash": 1_000_000,
+    "deepseek-chat": 1_000_000,
+    "deepseek-reasoner": 1_000_000,
+    "claude-sonnet-4-20250514": 200_000,
+    "gpt-4o": 128_000,
+    "Qwen/Qwen3-8B": 32_000,
+    "offline": 8_000,          # 无真实模型，仅测试用
 }
 COMPACT_TRIGGER_RATIO = 0.75   # 触发线：窗口 75%
 COMPACT_TARGET_RATIO  = 0.50   # 压缩目标：压到窗口 50%
@@ -54,26 +66,27 @@ SUBAGENT_KEEP_RECENT_TURNS = 4    # 子代理保留轮数
 
 > ⚠️ 没有独立的 `enable_compact` 开关：只要 `agent.context is not None` 就默认启用。
 > 摘要模型**复用当前会话的 provider**（不额外选模型），`max_tokens=1024`、`tools=[]`。
+> ⚠️ 查表键是**模型名**：调用方统一传 `SoulAgent._model_key`（= `provider.model or provider.name`）。
+> 别传 `provider.name`——`openai-chat` 这类 provider 名与模型名不一致，会取不到正确窗口而回落到默认值。
 
 ---
 
 ## 4. 触发判定（A13 / P0-3）
 
 ```python
-def needs_compact(tokens, provider, fixed_overhead=0) -> bool:
-    window = CONTEXT_WINDOW.get(provider, CONTEXT_WINDOW["offline"])
+def needs_compact(tokens, model, fixed_overhead=0) -> bool:
+    window = context_window(model)   # 按模型名查表（精确 → 前缀 → DEFAULT_CONTEXT_WINDOW）
     return tokens + fixed_overhead + RESERVE_FOR_OUTPUT >= window * COMPACT_TRIGGER_RATIO
 ```
 
-`fixed_overhead` 是 **system prompt + 工具定义**的估算 token，由 `SoulAgent._fixed_overhead()` 每轮算出：
+`fixed_overhead` 是 **system prompt + 工具定义 + 图片 ref** 的估算 token，由 `SoulAgent` 每轮算出：
 
 ```12:14:soul_buddy/agent.py
-overhead = self._fixed_overhead(system, tools_specs)
-# P0-3: 触发阈值计入 system + tools 开销,否则 skills/MCP
-# 块很大时真实请求会先于 messages 阈值撞上窗口。
+ref_tokens = self._wire_ref_tokens(messages)          # 图片按分辨率另计
+overhead = self._fixed_overhead(system, tools_specs) + ref_tokens
 ```
 
-**为什么必须计入**：skills 索引块、subagent 目录、MCP 连接器描述都嵌在 system prompt 里。只数 messages 会低估真实请求，等 messages 阈值触发时请求其实早已超窗。
+**为什么必须计入**：skills 索引块、subagent 目录、MCP 连接器描述都嵌在 system prompt 里；图片在 buffer 里只是 `{"type": "image", "path": ...}` 的轻引用，base64 要到 wire 阶段才展开，纯文本估算会把它算成 0。只数 messages 会低估真实请求，等 messages 阈值触发时请求其实早已超窗。
 
 压缩目标（messages-only target）：
 
@@ -87,7 +100,7 @@ target = max(int(window * COMPACT_TARGET_RATIO) - fixed_overhead, window // 8)
 
 ```mermaid
 flowchart LR
-    subgraph W["模型窗口 window（如 deepseek 64k）"]
+    subgraph W["模型窗口 window（如 deepseek-flash 1M）"]
         direction LR
         A["安全区<br/>0 ~ 50%"] --> B["缓冲区<br/>50% ~ 75%"]
         B --> C["压缩触发区<br/>≥ 75%"]
@@ -103,7 +116,7 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    S["compact_if_needed(messages, provider, overhead)"] --> N{"needs_compact?<br/>tokens+overhead+4096 ≥ 75%"}
+    S["compact_if_needed(messages, model, overhead)"] --> N{"needs_compact?<br/>tokens+overhead+4096 ≥ 75%"}
     N -- "否" --> STOP["last_compacted=False，原样返回"]
     N -- "是" --> T["计算 target = max(50%−overhead, window/8)"]
     T --> L1["L1 · _truncate_tool_results<br/>超长 tool_result 截到 4000 字符"]
@@ -224,8 +237,8 @@ flowchart TD
 ```
 
 ```383:396:soul_buddy/context/compact.py
-def check_hard_limit(self, messages, provider, fixed_overhead=0) -> Optional[dict]:
-    window = CONTEXT_WINDOW.get(provider, CONTEXT_WINDOW["offline"])
+def check_hard_limit(self, messages, model, fixed_overhead=0) -> Optional[dict]:
+    window = context_window(model)
     total = _message_tokens(messages) + fixed_overhead + RESERVE_FOR_OUTPUT
     if total < window:
         return None
@@ -250,10 +263,10 @@ sequenceDiagram
     loop 每一轮 turn
         A->>A: _system_prompt(session)（每轮重组：durable / skills）
         A->>A: overhead = _fixed_overhead(system, tools_specs)
-        A->>C: (线程池) compact_if_needed(messages, provider, overhead)
+        A->>C: (线程池) compact_if_needed(messages, model, overhead)
         C->>C: 估算 → 必要时 L1→L2→L3/L4
         C-->>A: messages 就地修改（绝不 raise）
-        A->>C: check_hard_limit(messages, provider, overhead)
+        A->>C: check_hard_limit(messages, model, overhead)
         alt 超硬上限
             A->>C: force_reduce(messages)
             A->>C: check_hard_limit 复检
@@ -367,10 +380,14 @@ L1 截断 + L2 supersede 常常就够了。若不带 early return，会无谓地
 标记是消息 dict 上的私有字段，provider 适配层只取 `role` / `content` / `type`，不会污染请求体。行为上只保证幂等。
 
 **Q4：token 估算不准怎么办？**
-`estimate_tokens` 是启发式（CJK×1.5、ASCII×0.25），刻意留 25% 压缩余量吸收误差。`usage.py` 的 `calibrate()` 可用官方 `prompt_tokens` 按比例校准，但 scale 超出 `[0.3, 3.0]` 就放弃校准。
+`estimate_tokens` 是启发式（中文 ×1.0、ASCII 字母数字 ×0.25、ASCII 符号 ×1/3、空白 ×0.25、emoji ×2.0、其它非 ASCII ×1.0），刻意留 25% 压缩余量吸收误差。`usage.py` 的 `calibrate()` 可用官方 `prompt_tokens` 按比例校准，但 scale 超出 `[0.3, 3.0]` 就放弃校准。
 
-**Q5：offline provider 窗口只有 8k，测试怎么用？**
+**Q5：offline 窗口只有 8k，测试怎么用？**
 测试故意用 offline 触发压缩路径（`ctrl.compact_if_needed(msgs, "offline")`），因为它的窗口小、几乎必触发。
+
+**Q6：用户上传的图片，token 怎么算？**
+图片在 buffer 里只是 `{"type": "image", "path": ...}` 的轻引用（base64 只在 wire 阶段展开），所以 `estimate_tokens` 会把整张图算成 **0**。但视觉模型是按**分辨率**计费的，因此单列一条口径：`estimate_image_tokens()` 读图片头拿宽高（纯 stdlib，不引入 Pillow —— 打包环境不新增依赖），按 `max(85, w×h/750)` 估算，读不到尺寸回落 `IMAGE_TOKEN_FALLBACK=1400`。`SoulAgent._wire_ref_tokens()` 把它叠加进 `fixed_overhead`，并通过 `calc(..., extra_messages_tokens=)` 计入 `context_usage` 的 `messages` 分类。
+**非视觉模型**（`supports_images=False`）上图片会被降级成一句提示，此时**不计**整图 —— 否则纯文本模型贴几张图就会把估算顶到窗口，误触压缩甚至让硬上限预检终止 run。
 
 ---
 
@@ -384,6 +401,13 @@ L1 截断 + L2 supersede 常常就够了。若不带 early return，会无谓地
 | `test_summary_failure_degrades_to_prune` | A12 降级链 + `summary_failed` 事件 |
 | `test_compact_internal_error_does_not_raise` | 脏输入不抛异常（BR-19） |
 | `test_needs_compact_counts_fixed_overhead` | P0-3 overhead 计入触发 |
+| `test_context_window_lookup_by_model_name` | 窗口按模型名查表（含前缀匹配 + 未知模型兜底） |
+| `test_estimate_image_tokens_uses_pixel_dimensions` | 图片按分辨率计费（含 85 下限） |
+| `test_estimate_image_tokens_fallback_and_explicit_size` | 读不到尺寸回落常量；ref 带 width/height 时不读盘 |
+| `test_image_dimension_probes` | PNG/JPEG/GIF/BMP 头解析；坏文件/目录安全返回 (0,0) |
+| `test_estimate_images_tokens_sums_all_refs` | 一条消息多图累加；纯文本不计 |
+| `test_context_usage_counts_image_refs`（image_upload） | 图片计入 `context_usage` 的 messages 分类 |
+| `test_wire_ref_tokens_skipped_for_non_vision_model`（image_upload） | 非视觉模型不按整图计费 |
 | `test_early_stop_preserves_history_when_cheap_layers_suffice` | 便宜层够用时不得剪枝 |
 | `test_prune_runs_when_cheap_layers_not_enough` | 便宜层不足时剪到 `keep_recent_turns` |
 | `test_supersede_old_file_reads_keeps_pairs` | P1-6 supersede 且保持成对 |

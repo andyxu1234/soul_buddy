@@ -51,6 +51,18 @@ from .skills.registry import authorize_skill_tool
 from . import rubric as _rubric
 
 
+def _model_label(provider) -> str:
+    """Human-readable model id for provenance, falling back to the provider name.
+
+    ``Provider.model`` is empty for providers without a real model (offline);
+    the provider name is the next best label so a report never loses its
+    "who ran this" origin entirely.
+    """
+    if provider is None:
+        return ""
+    return getattr(provider, "model", "") or getattr(provider, "name", "") or ""
+
+
 class SoulAgent:
     def __init__(self, storage, tools, events, audit, provider: Provider,
                  permissions: PermissionPolicy, context=None, memory=None,
@@ -58,7 +70,7 @@ class SoulAgent:
                  subagents=None, subagent_runner_factory=None,
                  expert=None, kb_summary: str | None = None,
                  knowledge=None, kb_ids: list[str] | None = None,
-                 rubric=None) -> None:
+                 rubric=None, rubric_provider: Provider | None = None) -> None:
         self.storage = storage
         self.tools = tools
         self.events = events
@@ -80,6 +92,10 @@ class SoulAgent:
         # nothing until someone opts in (INV-21).
         self.rubric = (rubric if rubric is not None
                        else _rubric.RubricPolicy.from_config())
+        # P6: the judge may be pinned to a dedicated model
+        # (SOUL_RUBRIC_JUDGE_PROVIDER). None = reuse the session provider, which
+        # is what happens whenever no dedicated judge model is configured.
+        self.rubric_provider = rubric_provider
         self._call_counter: Counter[tuple[str, str]] = Counter()
         # Exposed so an abort can report partial progress (BR: no silent loss).
         self.modified_files: list[str] = []
@@ -181,27 +197,31 @@ class SoulAgent:
             # 中途 use_skill 加载的技能内容,都要能进入后续轮次的请求 (P1-7)。
             system, system_parts = self._system_prompt(session)
 
+            # 图片在 buffer 里只是轻引用，wire 阶段才展开成 base64 图片（按分辨率
+            # 计费），纯文本估算看不到它们 —— 单独算出来给压缩阈值和用量统计。
+            ref_tokens = self._wire_ref_tokens(messages)
+
             if self.context is not None:
-                # P0-3: 触发阈值计入 system + tools 开销,否则 skills/MCP
-                # 块很大时真实请求会先于 messages 阈值撞上窗口。
-                overhead = self._fixed_overhead(system, tools_specs)
+                # P0-3: 触发阈值计入 system + tools + 图片 ref 开销,否则 skills/MCP
+                # 块或几张截图就能让真实请求先于 messages 阈值撞上窗口。
+                overhead = self._fixed_overhead(system, tools_specs) + ref_tokens
                 # L4 摘要内嵌一次 provider 调用,放到线程池避免阻塞 SSE
                 # 事件循环(与工具派发同理由);compact 本身绝不 raise。
                 await anyio.to_thread.run_sync(
                     self.context.compact_if_needed,
-                    messages, self.provider.name, overhead)
+                    messages, self._model_key, overhead)
                 # P0-4: 硬上限预检 —— 明知会超窗的请求不发出去。
                 over = None
                 try:
                     over = self.context.check_hard_limit(
-                        messages, self.provider.name, overhead)
+                        messages, self._model_key, overhead)
                     if over:
                         log.warning(
                             "turn %d over hard limit (%s), forcing reduce",
                             turn, over)
                         self.context.force_reduce(messages)
                         over = self.context.check_hard_limit(
-                            messages, self.provider.name, overhead)
+                            messages, self._model_key, overhead)
                 except Exception:
                     log.exception("hard-limit preflight failed (non-fatal)")
                 if over:
@@ -227,8 +247,9 @@ class SoulAgent:
             usage = None
             try:
                 from .context.usage import ContextUsageCalculator
-                calc = ContextUsageCalculator(self.provider.name)
-                usage = calc.calc(system, system_parts, messages, tools_specs)
+                calc = ContextUsageCalculator(self._model_key)
+                usage = calc.calc(system, system_parts, messages, tools_specs,
+                                  ref_tokens)
                 await self._aemit(session, EventType.CONTEXT_USAGE, usage.to_dict())
             except Exception:
                 log.exception("context usage estimate failed (non-fatal)")
@@ -279,7 +300,7 @@ class SoulAgent:
                 try:
                     if model_turn.usage and not model_turn.usage.get("estimated"):
                         from .context.usage import ContextUsageCalculator
-                        calc = ContextUsageCalculator(self.provider.name)
+                        calc = ContextUsageCalculator(self._model_key)
                         calibrated = calc.calibrate(
                             usage, model_turn.usage["prompt_tokens"])
                         await self._aemit(session, EventType.CONTEXT_USAGE,
@@ -519,6 +540,10 @@ class SoulAgent:
                              text: str, turn: int,
                              modified_files: list[str]):
         """Score this run against the rubric, persist and emit the report."""
+        # The referee can be pinned to a dedicated model so that swapping the
+        # session model does not also swap the judge (comparable reports).
+        judge = self.rubric_provider if self.rubric_provider is not None \
+            else self.provider
         try:
             events = self.storage.read_transcript(session.id)
             run_events = _rubric.slice_run(events, request_id)
@@ -528,7 +553,7 @@ class SoulAgent:
                 modified_files=list(modified_files),
                 diff_text=self._collect_diff(session, request_id))
             report = await _rubric.evaluate(
-                sig, provider=self.provider, policy=self.rubric)
+                sig, provider=judge, policy=self.rubric)
         except Exception:
             # INV-20: verification must never take the run down — and a failure
             # here must not punish the model, so the run is treated as passed.
@@ -536,6 +561,10 @@ class SoulAgent:
             report = _rubric.aggregate([], [], policy=self.rubric,
                                        detail="rubric 评估异常，已跳过")
             report.passed = True
+
+        # Provenance for the per-model dashboard: who was graded, and by whom.
+        report.model = _model_label(self.provider)
+        report.judge_model = _model_label(judge)
 
         self._persist_report(session, request_id, report)
         await self._aemit(session, EventType.RUBRIC_EVALUATED, report.to_dict())
@@ -784,10 +813,11 @@ class SoulAgent:
             completion_tokens = int(u.get("completion_tokens") or 0)
             estimated = bool(u.get("estimated", False))
         else:
-            prompt_tokens = estimate_tokens(system) + estimate_messages(messages)
+            prompt_tokens = (estimate_tokens(system) + estimate_messages(messages)
+                             + self._wire_ref_tokens(messages))
             completion_tokens = estimate_tokens(turn.text)
             estimated = True
-        model = getattr(self.provider, "model", None) or self.provider.name
+        model = self._model_key
         cost_usd = price(model, prompt_tokens, completion_tokens)
         self.memory.record_usage(
             session.id, model, prompt_tokens, completion_tokens,
@@ -889,15 +919,44 @@ class SoulAgent:
         text = text + f"\nWorkspace root: {session.workspace_root}"
         return text, parts
 
+    @property
+    def _model_key(self) -> str:
+        """上下文窗口查表键：优先用真实模型名，offline 等无模型时退回 provider 名。
+
+        CONTEXT_WINDOW 按模型名命名（一个平台挂多个模型，窗口各异），所以
+        压缩阈值 / 用量估算都必须传模型名而不是 provider 名。
+        """
+        return getattr(self.provider, "model", "") or self.provider.name
+
+    def _wire_ref_tokens(self, messages: list[dict]) -> int:
+        """估算图片 ref 在 wire 阶段展开后新增的 token。
+
+        buffer 里图片是 ``{"type": "image", "path": ...}`` 的轻引用，发送时才被
+        provider 换成 base64 图片；视觉模型按**分辨率**计费（≈ w×h/750），所以
+        纯文本估算会把它算成 0，压缩阈值与用量统计必须补上。
+
+        非视觉模型（`supports_images=False`）会把图片降级成一句提示，按整图计费
+        会误触压缩、甚至让硬上限预检把 run 直接终止，因此那种情况返回 0。
+        """
+        try:
+            if not getattr(self.provider, "supports_images", True):
+                return 0
+            from .context.tokens import estimate_images_tokens
+            return estimate_images_tokens(messages)
+        except Exception:
+            log.exception("wire ref token estimate failed (non-fatal)")
+            return 0
+
     def _fixed_overhead(self, system: str, tools_specs) -> int:
         """P0-3: 估算 system prompt + 工具定义的固定 token 开销。
 
         压缩触发若只数 messages,skills/subagents/MCP 块很大时真实请求会
         先于阈值撞上窗口;这部分开销每个 turn 固定,单独传给压缩器。
+        不含图片 ref —— 那部分由 `_wire_ref_tokens` 单独算并叠加进来。
         """
         try:
             from .context.usage import ContextUsageCalculator
-            calc = ContextUsageCalculator(self.provider.name)
+            calc = ContextUsageCalculator(self._model_key)
             return calc.calc(system, {}, [], tools_specs).total
         except Exception:
             return 0

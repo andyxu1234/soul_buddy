@@ -21,21 +21,21 @@ MODULES = [
         m_ref="—（横切支撑）", phase="P0", risk="低",
         responsibility=(
             "集中管理运行设置与目录布局：Settings（API key 来源、状态目录、workspace 根）、"
-            "CONTEXT_WINDOW 与压缩阈值、并发上限、MAX_TURNS 等全局常量。"
+            "CONTEXT_WINDOW（按模型名）与压缩阈值、并发上限、MAX_TURNS 等全局常量。"
             "所有模块从这里取配置，避免散落硬编码。"),
         files=[("config.py", "~110",
-                "Settings + 目录布局 + CONTEXT_WINDOW / 配额 / 并发上限")],
+                "Settings + 目录布局 + CONTEXT_WINDOW（按模型名）/ 配额 / 并发上限")],
         decisions=[
             "MAX_TURNS = 40；第 32 轮（80%）发 turn_budget_warning（BR-01/A11）",
             "MAX_CONCURRENT_RUNS = 4：同时 running 的 run 上限，第 5 个返回 429（BR-34/B06 修订 BR-11）",
             "并发上限作用在『running run』而非 session 数（BR-11 经 B06 修订）",
-            "token 估算默认启发式（中文×1.5、英文 len/4），tiktoken 仅可选增强（A23）",
+            "token 估算默认启发式（中文 ×1.0、ASCII 字母数字 ×0.25、ASCII 符号 ×1/3、emoji ×2.0），tiktoken 仅可选增强（A23）",
             "状态目录默认 ~/.soul_buddy，不污染用户 workspace（A26 附则）",
         ],
         todos=[
             "定义 Settings（pydantic-settings），从 .env 读 DEEPSEEK/ANTHROPIC/OPENAI key",
             "落地目录布局：~/.soul_buddy/{sessions,audit,permissions.json,backups}",
-            "导出 CONTEXT_WINDOW、各 provider 压缩阈值、配额常量",
+            "导出 CONTEXT_WINDOW（按模型名）与压缩阈值、配额常量",
             "导出 MAX_TURNS / MAX_CONCURRENT_RUNS / 单 run 同工具重放阈值(3)",
         ],
     ),
@@ -245,7 +245,7 @@ MODULES = [
             "（禁止塞桩/假数据），P3 记忆层接入后再注入。"),
         files=[
             ("externalize.py", "~220", "50 KiB 字节阈值(A14) + 配额与 LRU 清理(A15)"),
-            ("compact.py", "~340", "truncate/dedup/prune/summary + 失败降级链(A12) + 按 provider 阈值(A13)"),
+            ("compact.py", "~340", "truncate/dedup/prune/summary + 失败降级链(A12) + 按模型窗口阈值(A13)"),
             ("tokens.py", "~80", "A23 启发式估算（tiktoken 可选增强）"),
             ("prompt.py", "~260", "PromptSegment 预算拼装（A02：P2 不注册 memory segment）"),
         ],
@@ -253,14 +253,14 @@ MODULES = [
             "输出 > 50 KiB（UTF-8 字节数，严格大于）落盘返回指针 + 前 2KB 预览（BR-06 / A14）",
             "外部化配额：单会话 ≤200MB 或 500 文件，全局 ≤2GB，超配额 LRU 清理且入审计（BR-24 / A15）",
             "compact 四策略 + 失败降级链；降级路径仍须保持 tool_use/tool_result 成对（A12）",
-            "压缩阈值按 provider 不同（A13）",
+            "压缩阈值按模型不同（A13，CONTEXT_WINDOW 键为模型名）",
             "token 默认启发式；tiktoken 仅可选增强（A23）",
             "prompt 预算丢弃 segment 须可解释 dropped_segments（BR-14）；P2 不注册 memory（BR-15 / A02）",
         ],
         todos=[
             "externalize.py：字节阈值判定 + 落盘指针 + 配额/LRU 清理",
             "compact.py：truncate/dedup/prune/summary + 降级链 + 成对保护",
-            "tokens.py：启发式估算（中文×1.5、英文 len/4）",
+            "tokens.py：启发式估算（中文 ×1.0、ASCII 字母数字 ×0.25、ASCII 符号 ×1/3、emoji ×2.0）",
             "prompt.py：PromptSegment 预算拼装 + dropped_segments 记录",
         ],
     ),

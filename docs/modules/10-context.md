@@ -12,22 +12,22 @@
 | 文件 | 规模 | 职责 |
 |---|---|---|
 | `externalize.py` | ~220 | 50 KiB 字节阈值(A14) + 配额与 LRU 清理(A15) |
-| `compact.py` | ~340 | truncate/dedup/prune/summary + 失败降级链(A12) + 按 provider 阈值(A13) |
-| `tokens.py` | ~80 | A23 启发式估算（tiktoken 可选增强） |
+| `compact.py` | ~340 | truncate/dedup/prune/summary + 失败降级链(A12) + 按模型窗口阈值(A13) |
+| `tokens.py` | ~80 | A23 启发式估算（中文 ×1.0 / ASCII 字母数字 ×0.25 / ASCII 符号 ×1/3 / emoji ×2.0；tiktoken 可选增强） |
 | `prompt.py` | ~260 | PromptSegment 预算拼装（A02：P2 不注册 memory segment） |
 
 ## 3. 设计决策与约束
 - 输出 > 50 KiB（UTF-8 字节数，严格大于）落盘返回指针 + 前 2KB 预览（BR-06 / A14）
 - 外部化配额：单会话 ≤200MB 或 500 文件，全局 ≤2GB，超配额 LRU 清理且入审计（BR-24 / A15）
 - compact 四策略 + 失败降级链；降级路径仍须保持 tool_use/tool_result 成对（A12）
-- 压缩阈值按 provider 不同（A13）
+- 压缩阈值按**模型**不同（A13）：`CONTEXT_WINDOW` 以模型名为键，由 `context_window(model)` 解析（精确 → 前缀 → 兜底 `DEFAULT_CONTEXT_WINDOW`）
 - token 默认启发式；tiktoken 仅可选增强（A23）
 - prompt 预算丢弃 segment 须可解释 dropped_segments（BR-14）；P2 不注册 memory（BR-15 / A02）
 
 ## 4. 实现要点 / TODO
 - [ ] externalize.py：字节阈值判定 + 落盘指针 + 配额/LRU 清理
 - [ ] compact.py：truncate/dedup/prune/summary + 降级链 + 成对保护
-- [ ] tokens.py：启发式估算（中文×1.5、英文 len/4）
+- [ ] tokens.py：启发式估算（中文 ×1.0、ASCII 字母数字 ×0.25、ASCII 符号 ×1/3、emoji ×2.0）
 - [ ] prompt.py：PromptSegment 预算拼装 + dropped_segments 记录
 
 ## 5. 关联文档

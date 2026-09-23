@@ -13,7 +13,7 @@ from typing import Any
 
 from .base import (ModelTurn, Provider, ProviderRequest, ToolCall, ToolSpec,
                    image_file_bytes, map_file_refs, map_image_refs,
-                   missing_image_note)
+                   missing_image_note, unsupported_image_note)
 
 log = logging.getLogger("soul_buddy.provider")
 
@@ -29,10 +29,19 @@ def _to_openai_tools(tools: list[ToolSpec]) -> list[dict]:
     } for t in tools]
 
 
-def _to_wire_messages(messages: list[Any]) -> list[Any]:
+def _to_wire_messages(messages: list[Any],
+                      supports_images: bool = True) -> list[Any]:
     """Resolve internal image refs -> OpenAI image_url (data URL) parts,
-    and file attachment refs -> text blocks (read from disk here)."""
+    and file attachment refs -> text blocks (read from disk here).
+
+    With `supports_images=False` (the configured model is not a VLM) every
+    image ref degrades to a text note: an image_url block would make the
+    gateway reject the entire request, including text-only turns whose
+    history happens to hold an old screenshot.
+    """
     def _convert(ref: dict) -> dict:
+        if not supports_images:
+            return unsupported_image_note(ref)
         data, mt = image_file_bytes(ref)
         if data is None:
             return missing_image_note(ref)
@@ -80,13 +89,17 @@ class OpenAIChatProvider(Provider):
 
     def _kwargs(self, req: ProviderRequest) -> dict[str, Any]:
         wire = [{"role": "system", "content": req.system}] + \
-            _to_wire_messages(req.messages)
+            _to_wire_messages(req.messages, self.supports_images)
         tools = self.tool_schemas(req.tools) if req.tools else None
         kwargs: dict[str, Any] = {"model": self.model, "messages": wire,
                                   "max_tokens": req.max_tokens}
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
+        if req.extra_body:
+            # SDK merges this into the JSON body (e.g. chat_template_kwargs to
+            # turn a thinking model's reasoning off).
+            kwargs["extra_body"] = req.extra_body
         return kwargs
 
     # --- P5: streaming -----------------------------------------------------
@@ -239,13 +252,15 @@ class OpenAIChatProvider(Provider):
 
     def create(self, req: ProviderRequest) -> ModelTurn:
         wire = [{"role": "system", "content": req.system}] + \
-            _to_wire_messages(req.messages)
+            _to_wire_messages(req.messages, self.supports_images)
         tools = self.tool_schemas(req.tools) if req.tools else None
         kwargs: dict[str, Any] = {"model": self.model, "messages": wire,
                                   "max_tokens": req.max_tokens}
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
+        if req.extra_body:
+            kwargs["extra_body"] = req.extra_body
         log.info("provider.create model=%s messages=%d tools=%s",
                  self.model, len(wire), bool(tools))
         try:

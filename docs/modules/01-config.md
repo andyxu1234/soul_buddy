@@ -24,7 +24,7 @@
 | `SOUL_PROVIDER` | 空（自动探测） | 强制指定 provider；空则由已有 key 推断 |
 | `DEEPSEEK_API_KEY` | `""` | DeepSeek API key |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek 接口地址 |
-| `DEEPSEEK_MODEL` | `deepseek-chat` | DeepSeek 模型名 |
+| `DEEPSEEK_MODEL` | `deepseek-flash` | DeepSeek 模型名（`deepseek-flash` = **DeepSeek-V4.1-Flash**，1M 上下文、支持图像理解；另一在售 id 为 `deepseek-v4-pro`。旧名 `deepseek-v4-flash` 仍可调用但模型已下线，`deepseek-chat` / `deepseek-reasoner` 已于 2026-07-24 停用） |
 | `ANTHROPIC_API_KEY` | `""` | Anthropic API key |
 | `ANTHROPIC_BASE_URL` | `""` | Anthropic 接口地址（空用官方默认） |
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-20250514` | Anthropic 模型名 |
@@ -122,7 +122,9 @@
 ### 5.2 上下文窗口与压缩（A13）
 | 常量 | 值 | 说明 |
 |---|---|---|
-| `CONTEXT_WINDOW` | `{deepseek: 64_000, anthropic: 200_000, openai: 128_000, offline: 8_000}` | 各 provider 上下文窗口 |
+| `CONTEXT_WINDOW` | `{"deepseek-flash": 1_000_000, "deepseek-v4-pro": 1_000_000, "deepseek-v4.1-flash": 1_000_000, "deepseek-v4-flash": 1_000_000, "claude-sonnet-4-20250514": 200_000, "gpt-4o": 128_000, "Qwen/Qwen3-8B": 32_000, "offline": 8_000}` | 各**模型**的上下文窗口（键为模型名，不是 provider 名；DeepSeek 旧名保留为别名） |
+| `DEFAULT_CONTEXT_WINDOW` | `32_000` | 未收录 / 空模型时的兜底窗口 |
+| `context_window(model)` | 函数 | 解析窗口：精确命中 → 前缀匹配（最长键优先）→ `DEFAULT_CONTEXT_WINDOW` |
 | `COMPACT_TRIGGER_RATIO` | `0.75` | 达到窗口 75% 触发压缩 |
 | `COMPACT_TARGET_RATIO` | `0.50` | 压缩目标降至 50% |
 | `RESERVE_FOR_OUTPUT` | `4_096` | 为输出预留 token |

@@ -1,7 +1,7 @@
 """Context layer facade: bundles compaction + system-prompt planning.
 
 The agent talks to a single `ContextLayer` object:
-    ctx.compact_if_needed(messages, provider_name)
+    ctx.compact_if_needed(messages, model)      # model id -> context window
     system_text, meta = ctx.assemble_system_prompt(session, memory, audit)
 
 A02 — the **memory** segment is registered here (P3 fills it). When a `memory`
@@ -41,15 +41,15 @@ class ContextLayer:
         self.planner.register(
             "durable", self._render_durable, priority=95, budget_priority=95)
 
-    def compact_if_needed(self, messages: list[dict], provider_name: str,
+    def compact_if_needed(self, messages: list[dict], model: str,
                           fixed_overhead: int = 0) -> None:
-        self.compact.compact_if_needed(messages, provider_name, fixed_overhead)
+        self.compact.compact_if_needed(messages, model, fixed_overhead)
 
-    def check_hard_limit(self, messages: list[dict], provider_name: str,
+    def check_hard_limit(self, messages: list[dict], model: str,
                          fixed_overhead: int = 0) -> Optional[dict]:
-        """P0-4: would the next request exceed the provider window?"""
+        """P0-4: would the next request exceed the model window?"""
         return self.compact.check_hard_limit(
-            messages, provider_name, fixed_overhead)
+            messages, model, fixed_overhead)
 
     def force_reduce(self, messages: list[dict]) -> None:
         self.compact.force_reduce(messages)

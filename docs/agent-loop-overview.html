@@ -166,7 +166,7 @@ flowchart TB
   API["FastAPI 路由层<br>runs · sessions · permissions · events · mcp · skills · memory"]
   RT["Runtime 装配中心<br>storage · events · audit · registry · provider · db · gate"]
   AG["SoulAgent 循环核心"]
-  PV["Provider 适配<br>deepseek 64k / openai 128k / anthropic 200k / offline 8k"]
+  PV["Provider 适配<br>窗口按模型名取：deepseek-flash 1M /<br>claude-sonnet-4 200k / gpt-4o 128k / Qwen3-8B 32k / offline 8k"]
   TR["ToolRegistry<br>14 内置工具 + MCP 动态绑定"]
   PM["权限层<br>policy 规则表 + gate FIFO 队列 + 路径守卫"]
   CX["ContextLayer<br>分层压缩 + prompt 规划 + 外置化 50KiB"]
@@ -548,7 +548,7 @@ SSE 端点（<code>api/routers/events.py</code>）双段式：先 <code>read_sin
 <tr><td><code>REPEAT_CALL_LIMIT</code></td><td>3</td><td>同一 (工具, 参数) 重复即拒绝，per-run 作用域</td></tr>
 <tr><td><code>FIRST_TURN_REASONING_MIN_LEN</code></td><td>20</td><td>首轮推理最小字符数</td></tr>
 <tr><td><code>FIRST_TURN_REASONING_MAX_RETRIES</code></td><td>2</td><td>首轮推理守卫重试上限</td></tr>
-<tr><td><code>CONTEXT_WINDOW</code></td><td>deepseek 64k / anthropic 200k / openai 128k / offline 8k</td><td>按 provider 取窗口</td></tr>
+<tr><td><code>CONTEXT_WINDOW</code></td><td>deepseek-flash 1M / claude-sonnet-4 200k / gpt-4o 128k / Qwen3-8B 32k / offline 8k（未收录模型兜底 32k）</td><td>按<strong>模型名</strong>取窗口（<code>context_window()</code>）</td></tr>
 <tr><td><code>COMPACT_TRIGGER_RATIO</code></td><td>0.75</td><td>压缩触发阈值</td></tr>
 <tr><td><code>COMPACT_TARGET_RATIO</code></td><td>0.50</td><td>压缩目标</td></tr>
 <tr><td><code>RESERVE_FOR_OUTPUT</code></td><td>4096</td><td>输出 token 预留</td></tr>

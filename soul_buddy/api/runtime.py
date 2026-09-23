@@ -34,8 +34,8 @@ def _expand_env(value):
 
 from ..audit import AuditLog
 from ..config import (
-    KB_DB_PATH, KB_UPLOADS_DIR, MCP_CONFIG_PATH, Settings, SKILLS_DIR,
-    SUBAGENTS_DIR,
+    KB_DB_PATH, KB_UPLOADS_DIR, MCP_CONFIG_PATH, RUBRIC_JUDGE_PROVIDER,
+    Settings, SKILLS_DIR, SUBAGENTS_DIR,
 )
 from ..events import EventBus
 from ..experts import ExpertStore, kb_usage_summary
@@ -47,7 +47,7 @@ from ..memory import MemoryDB, MemoryManager
 from ..memory.pricing import price
 from ..mcp import ConnectorManager, MCPBridge
 from ..permissions import PermissionPolicy, WorkspaceScope, PermissionGate
-from ..providers import select_provider
+from ..providers import build_named_provider, select_provider
 from ..skills import SkillRegistry
 from ..storage import SessionStore
 from ..subagents import SubAgentRegistry, SubAgentRunner, build_task_spec
@@ -309,6 +309,12 @@ class Runtime:
         # Per-session provider override: "auto" or empty falls back to global default.
         session_provider = session.provider if session.provider and session.provider != "auto" else self.settings.provider
         provider = select_provider(self.settings, force_name=session_provider)
+        # Rubric judge is pinned to its own model (default xiaomi / mimo-v2.5) so
+        # that switching the session model does not also switch the referee.
+        # build_named_provider returns None when that provider has no key, in
+        # which case the agent falls back to the session provider.
+        rubric_provider = build_named_provider(self.settings,
+                                               RUBRIC_JUDGE_PROVIDER)
         # 专家绑定(s18):先加载专家,因为 replace_core 专家需要替换 role 段
         expert = self.experts.get(getattr(session, "expert_id", None))
         if expert is not None and not expert.enabled:
@@ -363,7 +369,8 @@ class Runtime:
                          stream=True, subagents=subagents,
                          subagent_runner_factory=runner_factory,
                          expert=expert, kb_summary=kb_summary,
-                         knowledge=knowledge, kb_ids=kb_ids)
+                         knowledge=knowledge, kb_ids=kb_ids,
+                         rubric_provider=rubric_provider)
 
     # --- bootstrap (A09 / B11) ---------------------------------------------
     def consume_bootstrap(self, token: str) -> bool:

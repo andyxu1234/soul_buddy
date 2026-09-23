@@ -50,7 +50,10 @@ async def evaluate(sig: RunSignals, *, provider=None,
 
     quality = evaluate_quality_by_rules(sig)
     degraded = False
-    if provider is not None:
+    # The TypeSafe judge needs no provider — that is the point of the backend
+    # switch — so the gate is "is there anything to judge with", not "is there
+    # a provider".
+    if provider is not None or policy.uses_typesafe:
         llm_scores, degraded = await evaluate_quality_by_llm(sig, provider, policy)
         quality.extend(llm_scores)
 

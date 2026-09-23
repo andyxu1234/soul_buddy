@@ -14,6 +14,14 @@ interface Props {
 /** 质量维度满分档（Q 维 0-3） */
 const MAX_QUALITY = 3
 
+/** 报告未记录模型时的占位桶（早期报告没有 model 字段） */
+const UNKNOWN_MODEL = 'unknown'
+
+function modelLabel(model?: string | null): string {
+  if (!model || model === UNKNOWN_MODEL) return '未记录'
+  return model
+}
+
 function pct(v: number | null | undefined, digits = 0): string {
   return v == null ? '—' : `${(v * 100).toFixed(digits)}%`
 }
@@ -59,13 +67,15 @@ export function RubricPanel({ onToast }: Props) {
   const [loading, setLoading] = useState(true)
   const [detail, setDetail] = useState<RubricReportRow | null>(null)
   const [modeFilter, setModeFilter] = useState<string>('')   // '' = 全部
+  const [modelFilter, setModelFilter] = useState<string>('') // '' = 全部模型
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const [s, r] = await Promise.all([
-        api.getRubricSummary(),
-        api.listRubricReports(300, 0, modeFilter || undefined),
+        api.getRubricSummary(modelFilter || undefined),
+        api.listRubricReports(300, 0, modeFilter || undefined,
+          modelFilter || undefined),
       ])
       setSummary(s)
       setReports(r.reports || [])
@@ -74,7 +84,7 @@ export function RubricPanel({ onToast }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [modeFilter, onToast])
+  }, [modeFilter, modelFilter, onToast])
 
   useEffect(() => { load() }, [load])
 
@@ -167,6 +177,35 @@ export function RubricPanel({ onToast }: Props) {
           </div>
         ) : (
           <>
+            {/* ── 0. 模型筛选：切换被测模型，所有分区随之下钻 ─────────── */}
+            {(summary!.available_models?.length ?? 0) > 0 && (
+              <div className="rb-filterbar">
+                <span className="rb-filterbar-label">被测模型</span>
+                <button
+                  className={`rb-chip ${modelFilter === '' ? 'active' : ''}`}
+                  onClick={() => setModelFilter('')}
+                >
+                  全部
+                  <em>{summary!.available_models.reduce((s, m) => s + m.runs, 0)}</em>
+                </button>
+                {summary!.available_models.map((m) => (
+                  <button
+                    key={m.model}
+                    className={`rb-chip ${modelFilter === m.model ? 'active' : ''}`}
+                    onClick={() => setModelFilter(modelFilter === m.model ? '' : m.model)}
+                  >
+                    {modelLabel(m.model)}
+                    <em>{m.runs}</em>
+                  </button>
+                ))}
+                <span className="rb-filterbar-judge">
+                  打分模型 {summary!.config_judge_provider
+                    ? summary!.config_judge_provider
+                    : '跟随会话'}
+                </span>
+              </div>
+            )}
+
             {/* ── 1. 能力总览：§7.3 指标 + 通过率 ─────────────────────── */}
             <section className="rb-section">
               <div className="rb-section-head">
@@ -276,6 +315,56 @@ export function RubricPanel({ onToast }: Props) {
               </p>
             </section>
 
+            {/* ── 3b. 模型表现：同一套 rubric 下横向对比 ──────────────── */}
+            {(summary!.model_stats?.length ?? 0) > 0 && (
+              <section className="rb-section">
+                <div className="rb-section-head">
+                  <h3>模型表现</h3>
+                  <span className="rb-section-sub">点击一行即可只看该模型</span>
+                </div>
+                <div className="rb-models">
+                  <div className="rb-model-head">
+                    <span>被测模型</span>
+                    <span>报告</span>
+                    <span>通过率</span>
+                    <span>平均分</span>
+                    <span>降级</span>
+                    <span>打分模型</span>
+                  </div>
+                  {summary!.model_stats.map((m) => {
+                    const tone = m.average_total == null ? 'neutral'
+                      : m.average_total >= 80 ? 'ok'
+                        : m.average_total >= 70 ? 'warn' : 'danger'
+                    return (
+                      <div
+                        key={m.model}
+                        className={`rb-model-row ${modelFilter === m.model ? 'active' : ''}`}
+                        onClick={() => setModelFilter(
+                          modelFilter === m.model ? '' : m.model)}
+                      >
+                        <span className="rb-model-name">{modelLabel(m.model)}</span>
+                        <span className="rb-model-num">{m.runs}</span>
+                        <span className="rb-model-num">{pct(m.pass_rate)}</span>
+                        <span className={`rb-model-num ${tone}`}>
+                          {m.average_total != null ? m.average_total.toFixed(1) : '—'}
+                        </span>
+                        <span className="rb-model-num">{m.degraded}</span>
+                        <span className="rb-model-judge">
+                          {Object.entries(m.judge_models)
+                            .map(([j, n]) => `${modelLabel(j)}×${n}`)
+                            .join('、') || '—'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <p className="rb-note">
+                  每个模型只和「同一把尺子」比较：打分模型列即该组报告实际使用的
+                  judge（配置 <code>SOUL_RUBRIC_JUDGE_PROVIDER</code> 可固定它）。
+                </p>
+              </section>
+            )}
+
             {/* ── 4. 运行明细 ──────────────────────────────────────────── */}
             <section className="rb-section">
               <div className="rb-section-head">
@@ -315,6 +404,7 @@ export function RubricPanel({ onToast }: Props) {
                       <span>G1</span>
                       <span>G2</span>
                       <span>G3</span>
+                      <span>模型</span>
                       <span>模式</span>
                       <span />
                     </div>
@@ -336,6 +426,9 @@ export function RubricPanel({ onToast }: Props) {
                           </span>
                           <span className="rb-t-total">{r.total}</span>
                           {gcell('G1')}{gcell('G2')}{gcell('G3')}
+                          <span className="rb-t-model" title={r.model || undefined}>
+                            {modelLabel(r.model)}
+                          </span>
                           <span className="rb-t-mode">
                             {r.mode}
                             {r.degraded && <span className="rb-tag warn" title="LLM judge 未执行">降级</span>}
@@ -395,6 +488,11 @@ function RubricDetail({ row, onClose }: { row: RubricReportRow; onClose: () => v
             {d.name}
             {!d.applicable && <span className="rb-tag neutral">不适用</span>}
             {d.judge === 'llm' && <span className="rb-tag info">LLM</span>}
+            {d.judge === 'typesafe' && (
+              <span className="rb-tag info">
+                TypeSafe{d.confidence != null ? ` ${d.confidence.toFixed(2)}` : ''}
+              </span>
+            )}
           </span>
           <span className="rb-dim-reason">{d.reason}</span>
         </div>
@@ -420,6 +518,8 @@ function RubricDetail({ row, onClose }: { row: RubricReportRow; onClose: () => v
             </h3>
             <p>
               {fmtTime(row.mtime)} · session {row.session_id.slice(0, 8)} · mode {r.mode}
+              {' · '}被测模型 {modelLabel(r.model)}
+              {r.judge_model ? ` · judge ${modelLabel(r.judge_model)}` : ''}
             </p>
           </div>
           <div className="rb-modal-total">

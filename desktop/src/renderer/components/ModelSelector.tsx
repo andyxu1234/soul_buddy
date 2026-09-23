@@ -34,7 +34,7 @@ export function ModelSelector({ current, providers, onChange }: Props) {
         title="切换模型"
       >
         <span className="model-dot" />
-        <span className="model-label">{active?.label || 'Auto'}</span>
+        <span className="model-label">{active?.label || 'Deepseek-V4.1-Flash'}</span>
         <Icon name="chevron-down" size={12} />
       </button>
       {open && (

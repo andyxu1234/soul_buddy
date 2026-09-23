@@ -52,16 +52,44 @@ class ProviderRequest:
     tools: list[ToolSpec]
     max_tokens: int = 4096
     required_tool: str | None = None
+    # Extra keys merged into the provider's request body (the OpenAI SDK's
+    # ``extra_body``). Used today by the rubric judge to switch a thinking model
+    # out of reasoning mode — see ``Provider.thinking_off_extra_body``.
+    extra_body: dict[str, Any] | None = None
 
 
 class Provider(ABC):
     name: str = "base"
+    # The concrete model id this instance talks to (e.g. "deepseek-chat",
+    # "Qwen/Qwen3-8B"). Concrete providers set it in __init__; it is the key for
+    # context-window lookup (config.context_window) and cost pricing. Providers
+    # without a real model (offline) leave it empty and callers fall back to
+    # `name`.
+    model: str = ""
     # Whether this provider is backed by a real model. The offline provider
     # sets this to False so callers that would otherwise spend a call can skip
     # it instead of guessing (rubric judge degradation, see rubric/judge.py).
     # A capability flag rather than a name check: comparing `name` breaks the
     # moment someone subclasses the offline provider for tests.
     llm_backed: bool = True
+    # Whether the configured *model* accepts image content blocks. Gateways
+    # that host both text-only and vision models behind one OpenAI-shaped
+    # endpoint (SiliconFlow) set this per model. When False, wire conversion
+    # degrades image refs to a text note instead of emitting an image_url
+    # block — a non-VLM rejects the whole request with
+    # `400 code 20041 The model is not a VLM`, and because history replay
+    # re-sends old screenshots that killed *every* later turn of the session.
+    supports_images: bool = True
+    # Body extras that switch a *thinking* model out of reasoning mode, or None
+    # when the model has no such switch. The rubric judge applies it (by putting
+    # it on ``ProviderRequest.extra_body``): scoring is a mechanical, bounded
+    # task, and measuring xiaomi/mimo-v2.5 showed the thinking path costs ~44s
+    # instead of ~1.5s and can spend the entire output budget on
+    # ``reasoning_content`` before emitting any JSON at all.
+    #
+    # It is deliberately opt-in per request rather than baked into the provider:
+    # normal session turns keep the model's full reasoning ability.
+    thinking_off_extra_body: dict[str, Any] | None = None
 
     @abstractmethod
     def create(self, req: ProviderRequest) -> ModelTurn: ...
@@ -193,6 +221,20 @@ def missing_image_note(ref: dict) -> dict:
     """Wire-safe replacement for an image whose file vanished mid-session."""
     name = ref.get("name") or ref.get("path") or "image"
     return {"type": "text", "text": f"[图片文件已不存在: {name}]"}
+
+
+def unsupported_image_note(ref: dict) -> dict:
+    """Wire-safe replacement for an image the current model cannot see.
+
+    Used when `Provider.supports_images` is False: the ref stays in the
+    buffer (so switching to a vision model later restores the image), but the
+    wire carries a note instead of a block the model would reject outright.
+    """
+    name = ref.get("name") or ref.get("path") or "image"
+    return {"type": "text",
+            "text": f"[图片 {name} 未发送：当前模型不支持图片输入（非视觉模型）]"}
+
+
 
 
 # Max characters of one text attachment injected into the wire prompt.

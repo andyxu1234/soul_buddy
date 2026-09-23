@@ -632,13 +632,11 @@ export default function App() {
 }
 
 const AVAILABLE_PROVIDERS = [
-  { id: 'auto', label: 'Auto' },
-  { id: 'deepseek', label: 'DeepSeek' },
-  { id: 'anthropic', label: 'Claude' },
-  { id: 'openai-chat', label: 'GPT' },
+  { id: 'deepseek', label: 'Deepseek-V4.1-Flash' },
+  { id: 'siliconflow', label: 'Qwen/Qwen3-8B' },
 ]
 
 function providerLabel(provider?: string | null): string {
   const p = AVAILABLE_PROVIDERS.find((x) => x.id === provider)
-  return p?.label || provider || 'Auto'
+  return p?.label || provider || 'Deepseek-V4.1-Flash'
 }

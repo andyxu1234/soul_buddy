@@ -7,7 +7,9 @@ from soul_buddy.context.compact import (
     build_summary_prompt, split_summary_response,
 )
 from soul_buddy.context.externalize import Externalizer, mark_missing_pointers
-from soul_buddy.config import EXTERNALIZE_THRESHOLD_BYTES, CONTEXT_WINDOW
+from soul_buddy.config import (
+    EXTERNALIZE_THRESHOLD_BYTES, DEFAULT_CONTEXT_WINDOW, context_window,
+)
 
 _SUPERSEDED_NOTE = "[superseded by a later read of the same file]"
 
@@ -75,10 +77,28 @@ def test_externalize_exactly_threshold_stays_inline():
 
 # --- A13 needs_compact -------------------------------------------------------
 
-def test_needs_compact_respects_provider_window():
-    assert needs_compact(48_000, "deepseek") is True
-    assert needs_compact(10_000, "deepseek") is False
+def test_needs_compact_respects_model_window():
+    # DeepSeek V4 是 1M 窗口：48k 的 messages 离 0.75 触发线还远
+    assert needs_compact(48_000, "deepseek-flash") is False
+    # offline 窗口只有 8k：6k + 4096 预留已经越过触发线
+    assert needs_compact(6_000, "offline") is True
     assert needs_compact(200_000, "offline") is True
+
+
+def test_context_window_lookup_by_model_name():
+    # 官方在售 model id
+    assert context_window("deepseek-flash") == 1_000_000
+    assert context_window("deepseek-v4-pro") == 1_000_000
+    assert context_window("gpt-4o") == 128_000
+    assert context_window("Qwen/Qwen3-8B") == 32_000
+    # 旧名 / 非官方写法也要命中，否则会白白回落到 32k
+    assert context_window("deepseek-v4-flash") == 1_000_000
+    assert context_window("deepseek-v4.1-flash") == 1_000_000
+    # 带日期后缀的 id 走前缀匹配
+    assert context_window("deepseek-flash-20260910") == 1_000_000
+    # 未知 / 空模型回落到默认值，不替它猜窗口
+    assert context_window("some-brand-new-model") == DEFAULT_CONTEXT_WINDOW
+    assert context_window("") == DEFAULT_CONTEXT_WINDOW
 
 
 # --- compact: token drop + pair preservation ---------------------------------
@@ -126,7 +146,7 @@ def test_compact_keeps_pairs():
 def test_compact_no_compact_when_under_budget():
     msgs = _build_convo(3)
     ctrl = CompactController(keep_recent_turns=6)
-    ctrl.compact_if_needed(msgs, "deepseek")  # 64k window, 3 turns tiny
+    ctrl.compact_if_needed(msgs, "deepseek-chat")  # 1M window, 3 turns tiny
     assert ctrl.last_compacted is False
 
 
@@ -191,10 +211,10 @@ def test_externalize_global_cleanup():
 # --- P0-3: fixed overhead in the trigger --------------------------------------
 
 def test_needs_compact_counts_fixed_overhead():
-    # deepseek window 64k: 1k messages alone is far below the trigger...
-    assert needs_compact(1_000, "deepseek", 0) is False
+    # gpt-4o window 128k -> trigger 96k: 1k messages alone is far below it...
+    assert needs_compact(1_000, "gpt-4o", 0) is False
     # ...but a large system+tools overhead pushes the real request over it.
-    assert needs_compact(1_000, "deepseek", 60_000) is True
+    assert needs_compact(1_000, "gpt-4o", 96_000) is True
 
 
 # --- P1-5: early stop / P0-2: layered staging ---------------------------------
@@ -388,3 +408,91 @@ def test_bash_output_bounded_and_externalized(tmp_path):
     assert out2.startswith("M") and out2.rstrip().endswith("Z")
     # small -> unchanged
     assert _bound_output("ok", Ctx()) == "ok"
+
+
+# --- images count toward the context budget -----------------------------------
+# 图片在 buffer 里只是 {"type": "image", "path": ...} 的轻引用，base64 的展开
+# 发生在 wire 阶段，所以纯文本估算会把整张图算成 0 token。视觉模型是按
+# **分辨率**计费的，必须有单独的口径。
+
+def _png_header(w: int, h: int) -> bytes:
+    """够用的 PNG 头：签名 + IHDR（宽高在 offset 16/20）。"""
+    return (b"\x89PNG\r\n\x1a\n" + (13).to_bytes(4, "big") + b"IHDR"
+            + w.to_bytes(4, "big") + h.to_bytes(4, "big")
+            + b"\x08\x06\x00\x00\x00")
+
+
+def test_estimate_image_tokens_uses_pixel_dimensions(tmp_path):
+    from soul_buddy.context.tokens import estimate_image_tokens
+
+    big = tmp_path / "shot.png"
+    big.write_bytes(_png_header(1920, 1080) + b"\x00" * 16)
+    assert estimate_image_tokens({"type": "image", "path": str(big)}) == \
+        round(1920 * 1080 / 750)                       # 2765
+    # 极小图走下限，绝不返回 0
+    tiny = tmp_path / "tiny.png"
+    tiny.write_bytes(_png_header(1, 1) + b"\x00" * 16)
+    assert estimate_image_tokens({"type": "image", "path": str(tiny)}) == 85
+
+
+def test_estimate_image_tokens_fallback_and_explicit_size(tmp_path):
+    from soul_buddy.context.tokens import (estimate_image_tokens,
+                                           IMAGE_TOKEN_FALLBACK)
+
+    # 读不到文件 -> 兜底常量，绝不抛
+    assert estimate_image_tokens(
+        {"type": "image", "path": str(tmp_path / "gone.png")}
+    ) == IMAGE_TOKEN_FALLBACK
+    assert estimate_image_tokens({"type": "image"}) == IMAGE_TOKEN_FALLBACK
+    # ref 里已带 width/height 时直接采用，不碰磁盘
+    assert estimate_image_tokens(
+        {"type": "image", "path": "Z:/nope.png", "width": 800, "height": 600}
+    ) == round(800 * 600 / 750)
+
+
+def test_image_dimension_probes(tmp_path):
+    from soul_buddy.context.tokens import _image_dimensions
+
+    gif = tmp_path / "a.gif"
+    gif.write_bytes(b"GIF89a" + (1920).to_bytes(2, "little")
+                    + (1080).to_bytes(2, "little") + b"\x00" * 8)
+    assert _image_dimensions(str(gif)) == (1920, 1080)
+
+    bmp = tmp_path / "a.bmp"
+    bmp.write_bytes(b"BM" + b"\x00" * 16 + (1920).to_bytes(4, "little")
+                    + (1080).to_bytes(4, "little"))
+    assert _image_dimensions(str(bmp)) == (1920, 1080)
+
+    # JPEG：SOI + APP0 + SOF0（尺寸在 SOF0 段里）
+    jpg = tmp_path / "a.jpg"
+    jpg.write_bytes(
+        b"\xff\xd8"
+        + b"\xff\xe0" + (16).to_bytes(2, "big") + b"JFIF\x00"
+        + b"\x01\x01\x00" + (72).to_bytes(2, "big")
+        + (72).to_bytes(2, "big") + b"\x00\x00"
+        + b"\xff\xc0" + (17).to_bytes(2, "big") + b"\x08"
+        + (1080).to_bytes(2, "big") + (1920).to_bytes(2, "big")
+        + b"\x03\x01\x11\x00\x02\x11\x01\x03\x11\x01")
+    assert _image_dimensions(str(jpg)) == (1920, 1080)
+
+    # 非图片 / 目录：不炸，返回 (0, 0)
+    junk = tmp_path / "x.bin"
+    junk.write_bytes(b"not an image at all")
+    assert _image_dimensions(str(junk)) == (0, 0)
+    assert _image_dimensions(str(tmp_path)) == (0, 0)
+    assert _image_dimensions(str(tmp_path / "missing.jpg")) == (0, 0)
+
+
+def test_estimate_images_tokens_sums_all_refs(tmp_path):
+    from soul_buddy.context.tokens import estimate_images_tokens
+
+    p = tmp_path / "s.png"
+    p.write_bytes(_png_header(1024, 1024) + b"\x00" * 16)
+    ref = {"type": "image", "path": str(p), "media_type": "image/png"}
+    msgs = [{"role": "user", "content": [{"type": "text", "text": "看图"},
+                                         ref, dict(ref)]},
+            {"role": "assistant", "content": [{"type": "text", "text": "ok"}]}]
+    assert estimate_images_tokens(msgs) == 2 * round(1024 * 1024 / 750)
+    # 纯文本消息不计图片
+    assert estimate_images_tokens([{"role": "user", "content": "纯文本"}]) == 0
+    assert estimate_images_tokens([]) == 0

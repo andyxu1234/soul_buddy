@@ -235,5 +235,5 @@ flowchart TD
 | Provider | 4 家（deepseek / anthropic / openai-chat / offline 脚本化） | `providers/` |
 | 主循环上限 | 40 轮（第 32 轮预警）；同参重放第 4 次拒绝 | `config.py` |
 | 权限规则 | 8 级顺序表 + 300s ASK 超时 | `permissions/policy.py` |
-| 上下文窗口 | deepseek 64k / anthropic 200k / openai 128k / offline 8k，75% 触发压缩 | `config.py` |
+| 上下文窗口 | 按**模型名**取：deepseek-flash 1M / claude-sonnet-4 200k / gpt-4o 128k / Qwen3-8B 32k / offline 8k（未收录兜底 32k），75% 触发压缩 | `config.py` |
 | 子代理 | 默认 10 轮 / 300 秒 / 8 类禁用工具 | `config.py` |

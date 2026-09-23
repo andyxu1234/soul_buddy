@@ -81,6 +81,16 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return float(raw.strip())
+    except ValueError:
+        return default
+
+
 _load_env_files()
 
 # --- Agent loop limits -------------------------------------------------------
@@ -93,11 +103,33 @@ REPEAT_CALL_LIMIT = 3              # BR-02: same (tool, args) >= 3 -> deny (per-
 FIRST_TURN_REASONING_MIN_LEN = 20    # 字符数,低于此值视为"没有推理"
 FIRST_TURN_REASONING_MAX_RETRIES = 2  # 最多强制重试几次,超过则放行(避免死循环)
 
-# --- Context window per provider (A13) --------------------------------------
-CONTEXT_WINDOW = {
-    "deepseek": 64_000,
-    "anthropic": 200_000,
-    "openai": 128_000,
+# --- Context window per model (A13) ------------------------------------------
+# 键是「模型名」而不是平台 / provider 名：一个平台会挂多个模型，窗口各不相同
+# （例如 DeepSeek 的 deepseek-flash 是 1M，而 Qwen3-8B 只有 32k）。
+# 查表统一走 context_window(model)；未收录的模型回落到 DEFAULT_CONTEXT_WINDOW。
+DEFAULT_CONTEXT_WINDOW = 32_000
+
+CONTEXT_WINDOW: dict[str, int] = {
+    # --- DeepSeek：在售的官方 model id，都是 1M ---
+    # deepseek-flash   = DeepSeek-V4.1-Flash（支持图像理解；思考/非思考可切）
+    # deepseek-v4-pro  = DeepSeek-V4-Pro-0813（不支持图像理解）
+    "deepseek-flash": 1_000_000,
+    "deepseek-v4-pro": 1_000_000,
+    # 旧名 / 非官方写法。deepseek-v4-flash 仍可调用（模型已下线，路由到
+    # V4.1-Flash 按 Flash 计费）；deepseek-chat / deepseek-reasoner 已于
+    # 2026-07-24 停用。保留只为让存量 env 拿到正确窗口，不回落到 32k。
+    "deepseek-v4-flash": 1_000_000,
+    "deepseek-v4.1-flash": 1_000_000,
+    "deepseek-chat": 1_000_000,
+    "deepseek-reasoner": 1_000_000,
+    # --- Anthropic ---
+    "claude-sonnet-4-20250514": 200_000,
+    "claude-sonnet-4": 200_000,
+    # --- OpenAI ---
+    "gpt-4o": 128_000,
+    # --- 硅基流动（Qwen3-8B）：原生 32,768 tokens，取 32k 留一点余量 ---
+    "Qwen/Qwen3-8B": 32_000,
+    # --- offline（无真实模型，脚本化多轮）---
     "offline": 8_000,
 }
 COMPACT_TRIGGER_RATIO = 0.75
@@ -105,6 +137,24 @@ COMPACT_TARGET_RATIO = 0.50
 RESERVE_FOR_OUTPUT = 4_096
 SUMMARY_INPUT_MAX_CHARS = 30_000    # dropped-history text sent to the summarizer (tail kept)
 SUBAGENT_KEEP_RECENT_TURNS = 4      # sub-agents are ephemeral workers: smaller history floor
+
+
+def context_window(model: str | None) -> int:
+    """按模型名解析上下文窗口（token）。
+
+    1. 精确命中 CONTEXT_WINDOW 直接用；
+    2. 否则按前缀匹配（最长键优先），兼容 "deepseek-chat-0324" 这类带后缀的 id；
+    3. 都没命中（含空值）回落到 DEFAULT_CONTEXT_WINDOW，不替未知模型猜窗口。
+    """
+    if not model:
+        return DEFAULT_CONTEXT_WINDOW
+    if model in CONTEXT_WINDOW:
+        return CONTEXT_WINDOW[model]
+    best = ""
+    for key in CONTEXT_WINDOW:
+        if len(key) > len(best) and model.startswith(key):
+            best = key
+    return CONTEXT_WINDOW[best] if best else DEFAULT_CONTEXT_WINDOW
 
 # --- Output externalization (A14 / BR-06) -----------------------------------
 EXTERNALIZE_THRESHOLD_BYTES = 50 * 1024     # 50 KiB, strict greater-than
@@ -141,6 +191,51 @@ RUBRIC_MIN_TURNS_LEFT = _env_int("SOUL_RUBRIC_MIN_TURNS_LEFT", 3)
 RUBRIC_LLM_JUDGE = _env_bool("SOUL_RUBRIC_LLM_JUDGE", True)             # Q5/Q6
 RUBRIC_JUDGE_DIFF_MAX_CHARS = _env_int("SOUL_RUBRIC_JUDGE_DIFF_MAX_CHARS", 8000)
 RUBRIC_DEGRADE_ON_NO_PROVIDER = _env_bool("SOUL_RUBRIC_DEGRADE_ON_NO_PROVIDER", True)
+# 用哪个 provider 跑 Q5/Q6 的 LLM judge —— 让裁判模型与会话模型解耦：
+# 换会话模型只改变"被评的对象"，不会连带换掉裁判，报告之间才可比。
+#   空 / session / self / auto = 复用会话自己的 provider（旧行为）
+#   其它值（默认 xiaomi）= 用该 provider；未配置对应 key 时自动回落到会话 provider
+RUBRIC_JUDGE_PROVIDER = _env_str("SOUL_RUBRIC_JUDGE_PROVIDER", "xiaomi").lower()
+
+# --- Rubric judge backend (Q5/Q6) -------------------------------------------
+#   llm      - default: ask the provider to emit {"scores": [...]} and parse it.
+#   typesafe - ask api.typesafe.ai for a calibrated probability distribution
+#              over the same anchor table, plus a `confidence`.
+# Switching backends changes *how* Q5/Q6 are measured, never the dimension list
+# or the anchor tables — those live in rubric/policy.py.
+RUBRIC_JUDGE_BACKEND = _env_str("SOUL_RUBRIC_JUDGE_BACKEND", "llm").lower()
+# Read once at import. Never returned to the client, never written to a report.
+TYPESAFE_API_KEY = (os.environ.get("TYPESAFE_API_KEY") or "").strip()
+RUBRIC_TYPESAFE_MODEL = _env_str("SOUL_RUBRIC_TYPESAFE_MODEL", "jev-latest")
+RUBRIC_TYPESAFE_TIMEOUT = _env_float("SOUL_RUBRIC_TYPESAFE_TIMEOUT", 30.0)
+# Upper bound (seconds) on a single *provider* judge call (backend=llm).
+# A "thinking" model burns hundreds of tokens of reasoning before emitting the
+# JSON: measured 41s and 209s on Qwen/Qwen3-8B vs 2-5s on deepseek-chat, and the
+# OpenAI SDK's own default is a 600s timeout plus two retries. An unbounded call
+# holds back the final message and run_finished, so the UI sits on "运行中" long
+# after the answer is on screen. Timing out degrades to the rule layer only
+# (INV-20) instead of stalling the run. 0 disables the bound.
+RUBRIC_JUDGE_TIMEOUT = _env_float("SOUL_RUBRIC_JUDGE_TIMEOUT", 30.0)
+# Output budget for one judge call. The judge asks a thinking model to skip its
+# reasoning (Provider.thinking_off_extra_body), so a few dozen tokens normally
+# suffice — this is a safety net for models that ignore that switch. Measured on
+# xiaomi/mimo-v2.5 with thinking ON: 700 tokens went entirely to
+# `reasoning_content` and `content` came back EMPTY, which the strict parser
+# rejects, silently degrading Q5/Q6 to "not applicable".
+RUBRIC_JUDGE_MAX_TOKENS = _env_int("SOUL_RUBRIC_JUDGE_MAX_TOKENS", 3000)
+# Below this the judgement is reported as not-applicable instead of being
+# averaged in. 0.5 is a *conservative floor*, not a discriminator: measured over
+# 6 repeats per scenario (spike/typesafe_confidence_dist.py) this judge runs at
+# 0.85-0.94 on clean material and still 0.55-0.72 on deliberately vague
+# material, so the floor only fires once the distribution has essentially
+# collapsed. Raise it to trade coverage for strictness.
+RUBRIC_TYPESAFE_MIN_CONFIDENCE = _env_float(
+    "SOUL_RUBRIC_TYPESAFE_MIN_CONFIDENCE", 0.5)
+# When TypeSafe is unreachable, fall back to the provider judge rather than
+# losing the LLM dimensions entirely (INV-20: the rubric must never become an
+# availability single point of failure).
+RUBRIC_TYPESAFE_FALLBACK_TO_LLM = _env_bool(
+    "SOUL_RUBRIC_TYPESAFE_FALLBACK_TO_LLM", True)
 
 # --- Sidecar lifecycle (A18 / B11 / B12) -----------------------------------
 BOOTSTRAP_TTL = 60                  # seconds, counted from SOULBUDDY_READY (B11)
@@ -249,13 +344,24 @@ class Settings:
     provider: str | None = None             # forced provider, else auto-detect
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
-    deepseek_model: str = "deepseek-chat"
+    # 官方当前 model id 是 deepseek-flash（= DeepSeek-V4.1-Flash，1M 上下文）。
+    # 旧名 deepseek-v4-flash 仍可调用但模型已下线（路由到 V4.1-Flash 计费）；
+    # deepseek-chat / deepseek-reasoner 已于 2026-07-24 停用。
+    deepseek_model: str = "deepseek-flash"
     anthropic_api_key: str = ""
     anthropic_base_url: str = ""
     anthropic_model: str = "claude-sonnet-4-20250514"
     openai_api_key: str = ""
     openai_base_url: str = ""
     openai_chat_model: str = "gpt-4o"
+    # --- 硅基流动（SiliconFlow，OpenAI 兼容）:Qwen3-8B ---
+    siliconflow_api_key: str = ""
+    siliconflow_base_url: str = "https://api.siliconflow.cn/v1"
+    siliconflow_model: str = "Qwen/Qwen3-8B"
+    # --- 小米 MiMo（OpenAI 兼容；rubric judge 的默认模型）---
+    xiaomi_api_key: str = ""
+    xiaomi_base_url: str = "https://api.xiaomimimo.com/v1"
+    xiaomi_model: str = "mimo-v2.5"
     # --- Knowledge base(资料库/RAG) embedding 配置(OpenAI 兼容 /embeddings) ---
     embedding_base_url: str = ""            # 空 = 未配置,资料库检索不可用
     embedding_api_key: str = ""
@@ -273,13 +379,21 @@ class Settings:
             provider=get("SOUL_PROVIDER") or None,
             deepseek_api_key=get("DEEPSEEK_API_KEY", ""),
             deepseek_base_url=get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-            deepseek_model=get("DEEPSEEK_MODEL", "deepseek-chat"),
+            deepseek_model=get("DEEPSEEK_MODEL", "deepseek-flash"),
             anthropic_api_key=get("ANTHROPIC_API_KEY", ""),
             anthropic_base_url=get("ANTHROPIC_BASE_URL", ""),
             anthropic_model=get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
             openai_api_key=get("OPENAI_API_KEY", ""),
             openai_base_url=get("OPENAI_BASE_URL", ""),
             openai_chat_model=get("OPENAI_CHAT_MODEL", "gpt-4o"),
+            siliconflow_api_key=get("SILICONFLOW_API_KEY", ""),
+            siliconflow_base_url=get("SILICONFLOW_BASE_URL",
+                                     "https://api.siliconflow.cn/v1"),
+            siliconflow_model=get("SILICONFLOW_MODEL", "Qwen/Qwen3-8B"),
+            xiaomi_api_key=get("XIAOMI_API_KEY", ""),
+            xiaomi_base_url=get("XIAOMI_BASE_URL",
+                                "https://api.xiaomimimo.com/v1"),
+            xiaomi_model=get("XIAOMI_MODEL", "mimo-v2.5"),
             embedding_base_url=get("EMBEDDING_BASE_URL", ""),
             embedding_api_key=get("EMBEDDING_API_KEY", ""),
             embedding_model=get("EMBEDDING_MODEL", ""),

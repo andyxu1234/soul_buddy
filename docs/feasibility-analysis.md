@@ -408,7 +408,7 @@ token 出现在 URL 中，可能被日志、历史记录留存。
 **Context**: compact 与预算需要估算 token 数。tiktoken 精度高，但**运行时下载 BPE 词表**，
 PyInstaller 打包环境失败率极高（原 P1.5 Spike 的必验项之一）。
 
-**Decision**: 默认用**纯 Python 启发式估算**（中文按字符 ×1.5、英文 len/4 的加权），
+**Decision**: 默认用**纯 Python 启发式估算**（中文按字符 ×1.0、ASCII 字母数字 ×0.25、ASCII 符号 ×1/3、emoji ×2.0），
 `tiktoken` 降级为可选增强，仅当打包验证通过才启用。
 
 **为什么敢这么做**：compact 的触发阈值是 `window × 0.75`，目标压到 `0.50` ——
@@ -581,7 +581,7 @@ soul_buddy/
 │
 ├── context/
 │   ├── externalize.py        # ← A14 字节阈值 / A15 配额 LRU
-│   ├── compact.py            # ← A12 失败降级链 / A13 按 provider 阈值
+│   ├── compact.py            # ← A12 失败降级链 / A13 按模型窗口阈值
 │   ├── tokens.py             # ← A23/ADR-009：启发式估算，不用 tiktoken
 │   └── prompt.py             # ⚠️ A02：P2 只注册非记忆 segment，P3 填 memory
 │

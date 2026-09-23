@@ -7,6 +7,7 @@ All provider interactions use the offline provider or hand-rolled stubs, so the
 suite is deterministic and costs zero tokens.
 """
 import asyncio
+import time
 
 import pytest
 
@@ -476,6 +477,43 @@ def test_judge_skipped_when_disabled_by_policy():
     assert degraded is True
 
 
+class _HangingJudge:
+    """A judge call that does not come back in a reasonable time.
+
+    Regression (qwen): Qwen/Qwen3-8B spent 41s and 209s on a scoring prompt
+    while deepseek-chat takes 2-5s. The judge ran unbounded, so the held-back
+    final message and run_finished only arrived minutes later — the UI sat on
+    "Agent 正在运行" long after the answer had already streamed out.
+    """
+
+    name = "hanging"
+
+    def create(self, req):
+        time.sleep(2)
+        return ModelTurn(text='{"scores":[{"id":"Q6","score":3,"reason":"x"}]}')
+
+
+def test_judge_timeout_degrades_instead_of_stalling_the_run():
+    sig = _sig(_run_ok(), diff_text="+hello world")
+    started = time.monotonic()
+    scores, degraded = asyncio.run(_call_judge(
+        sig, _HangingJudge(),
+        RubricPolicy(mode="advisory", judge_timeout=0.2)))
+    elapsed = time.monotonic() - started
+    assert scores == [] and degraded is True     # INV-20: rules only, no raise
+    assert elapsed < 1.5, f"judge call was not bounded ({elapsed:.2f}s)"
+
+
+def test_judge_timeout_zero_keeps_the_call_unbounded():
+    """0 is the documented escape hatch, not an accidental instant timeout."""
+    sig = _sig(_run_ok(), diff_text="+hello world")
+    scores, degraded = asyncio.run(
+        _call_judge(sig, _FakeJudge(),
+                    RubricPolicy(mode="advisory", judge_timeout=0)))
+    assert {s.id: s.score for s in scores} == {"Q5": 2, "Q6": 3}
+    assert degraded is False
+
+
 async def _call_judge(sig, provider, policy):
     from soul_buddy.rubric import evaluate_quality_by_llm
     return await evaluate_quality_by_llm(sig, provider, policy)
@@ -786,3 +824,40 @@ class _PairingProvider(OfflineProvider):
         if pending:
             self.orphans.append(str(sorted(pending)))
         return super().create(req)
+
+
+class _SlowJudgeProvider(OfflineProvider):
+    """Answers the loop from the script but lets the judge call drag on."""
+
+    llm_backed = True
+
+    def create(self, req):
+        if not req.tools and "评审员" in getattr(req, "system", ""):
+            time.sleep(2)
+            return ModelTurn(text='{"scores":[]}')
+        return super().create(req)
+
+
+async def test_trb12_slow_judge_does_not_hold_the_run_open(make_agent):
+    """Regression (qwen): the verification stage must not outlive the answer.
+
+    Measured judge latency: 2-5s on deepseek-chat but 41s / 209s on
+    Qwen/Qwen3-8B. While it ran, the assistant text was already visible on
+    screen (streamed as deltas) yet `message` + `run_finished` were held back,
+    so the UI showed "Agent 正在运行" for minutes. The timeout degrades the
+    report instead (INV-20).
+    """
+    provider = _SlowJudgeProvider()
+    provider.set_script(list(READ_ONLY_SCRIPT))
+    agent, session, storage = make_agent(
+        provider=provider,
+        rubric=RubricPolicy(mode="advisory", judge_timeout=0.2))
+
+    started = time.monotonic()
+    res = await agent.run(session, "帮我修改 a.txt", AutoApproveGate())
+    elapsed = time.monotonic() - started
+
+    assert [e.type for e in storage.read_transcript(session.id)][-1] == "run_finished"
+    assert res.rubric is not None
+    assert res.rubric["degraded"] is True        # rules only, judge skipped
+    assert elapsed < 1.5, f"run waited on the judge ({elapsed:.2f}s)"
