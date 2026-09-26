@@ -56,6 +56,10 @@ class ProviderRequest:
     # ``extra_body``). Used today by the rubric judge to switch a thinking model
     # out of reasoning mode — see ``Provider.thinking_off_extra_body``.
     extra_body: dict[str, Any] | None = None
+    # 1-based turn index of the agent loop (main agent / sub-agent) that issued
+    # this request; 0 when the caller has no notion of turns (rubric judge,
+    # summarizer). Providers use it only for logging.
+    turn: int = 0
 
 
 class Provider(ABC):

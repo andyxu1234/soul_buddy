@@ -254,7 +254,7 @@ class SoulAgent:
             except Exception:
                 log.exception("context usage estimate failed (non-fatal)")
 
-            req = ProviderRequest(system, messages, tools_specs)
+            req = ProviderRequest(system, messages, tools_specs, turn=turn)
             # Defense-in-depth: ensure no assistant message has tool_calls
             # without matching tool results. The provider API rejects this
             # with 400 "insufficient tool messages following tool_calls".

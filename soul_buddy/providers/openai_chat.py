@@ -251,18 +251,11 @@ class OpenAIChatProvider(Provider):
                 for c, r in results]
 
     def create(self, req: ProviderRequest) -> ModelTurn:
-        wire = [{"role": "system", "content": req.system}] + \
-            _to_wire_messages(req.messages, self.supports_images)
-        tools = self.tool_schemas(req.tools) if req.tools else None
-        kwargs: dict[str, Any] = {"model": self.model, "messages": wire,
-                                  "max_tokens": req.max_tokens}
-        if tools:
-            kwargs["tools"] = tools
-            kwargs["tool_choice"] = "auto"
-        if req.extra_body:
-            kwargs["extra_body"] = req.extra_body
+        # Single source of truth for the wire body: reuse _kwargs so subclasses
+        # (e.g. DeepSeekProvider) can hook request building via an override.
+        kwargs = self._kwargs(req)
         log.info("provider.create model=%s messages=%d tools=%s",
-                 self.model, len(wire), bool(tools))
+                 self.model, len(kwargs["messages"]), bool(kwargs.get("tools")))
         try:
             resp = self._client.chat.completions.create(**kwargs)
         except Exception:

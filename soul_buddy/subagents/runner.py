@@ -247,7 +247,7 @@ class SubAgentRunner:
             # Defense-in-depth: ensure no orphaned tool_calls before the
             # next provider call (same 400 guard as the main agent).
             sanitize_tool_messages(messages)
-            req = ProviderRequest(system, messages, tools_specs)
+            req = ProviderRequest(system, messages, tools_specs, turn=turn)
             try:
                 model_turn = provider.create(req)
             except Exception:
