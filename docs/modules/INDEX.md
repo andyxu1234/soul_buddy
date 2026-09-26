@@ -40,8 +40,7 @@
 | [07-providers.md](./07-providers.md) | `providers/` | M1 | P0/P1 | 中 | 5 |
 | [08-permissions.md](./08-permissions.md) | `permissions/` | M4 | P1 | 高 | 6 |
 | [09-tools.md](./09-tools.md) | `tools/` | M3 | P1 | 高 | 4 |
-| [10-context.md](./10-context.md) | `context/` | M7 | P2 | 中 | 4 |
-| [16-compact.md](./16-compact.md) | `context/compact.py` | M7（专题） | P0/P1 加固 | 中 | 1 |
+| [10-context.md](./10-context.md) | `context/` | M7 | P2（压缩加固 P0/P1） | 中 | 7 |
 | [17-human-in-the-loop.md](./17-human-in-the-loop.md) | `permissions/` + `agent.py` + `api/` + `renderer/` | M4（专题） | P1/P4 | 高 | 14 |
 | [18-skills.md](./18-skills.md) | `skills/` | M3（专题） | P5 | 中 | 4 |
 | [11-memory.md](./11-memory.md) | `memory/` | M8 | P3 | 低 | 4 |
@@ -53,7 +52,8 @@
 | [20-rubric.md](./20-rubric.md) | `rubric/` + `agent.py` 验收阶段 | M16 运行时交付验收 | P6 | 中 | 8 |
 
 > 注：`api/` 含 `runtime.py`+`main.py`+9 个 router；`knowledge/` 7 文件；`experts/` 3 文件 + 5 内置预设。
-> `16-compact` / `17-human-in-the-loop` / `18-skills` 为**跨模块专题**，不新增独立代码包，横向覆盖已有模块。
+> 原「16 · Context Compact」已并入 **[10-context.md](./10-context.md)**（§4 深度解析），不再单列。
+> `17-human-in-the-loop` / `18-skills` 为**跨模块专题**，不新增独立代码包，横向覆盖已有模块。
 > `19-mcp` 对应 `mcp/` 包（4 文件）+ `api/routers/mcp.py` + prompt 注入，P5 交付。
 > `20-rubric` 对应新增 `rubric/` 包（8 文件）+ `agent.py::run` 验收阶段 + 6 个新事件 + `script/rubric_report.py`，P6 已交付。
 
