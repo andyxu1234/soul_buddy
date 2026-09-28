@@ -23,7 +23,8 @@ __all__ = ["ContextLayer", "build_context_layer", "make_summary_provider"]
 
 class ContextLayer:
     def __init__(self, compact: CompactController, planner: PromptPlanner,
-                 memory=None, audit=None) -> None:
+                 memory=None, audit=None, persona_text: str = "",
+                 recall=None) -> None:
         self.compact = compact
         self.planner = planner
         self.memory = memory
@@ -34,6 +35,25 @@ class ContextLayer:
             # fresh environment never carries placeholder garbage — TC-M8-006).
             self.planner.register(
                 "memory", self._render_memory, priority=10, budget_priority=10)
+        # 长期记忆 v3 轨 A: persona 常驻段(SOUL.md/AGENTS.md)。缺失降级为空,
+        # 由 planner 跳过, 不占预算。
+        self.persona_text = persona_text
+        if persona_text:
+            self.planner.register(
+                "persona", lambda: self.persona_text, priority=80, budget_priority=80)
+        # 长期记忆 v3 轨 C: 每轮召回注入段。query 由 agent 每轮 set_memory_query 提供;
+        # query 为空段亦空, 由 planner 跳过。
+        self.recall = recall
+        self._recall_query = ""
+        # 每轮以当前用户输入为 query 注入召回段; recall 未配置时为 no-op。
+        def set_memory_query(q: str) -> None:
+            self._recall_query = (q or "").strip()
+        self.set_memory_query = set_memory_query
+        if recall is not None:
+            def _render_recall() -> str:
+                return self.recall(self._recall_query) if self._recall_query else ""
+            self.planner.register(
+                "longterm", _render_recall, priority=12, budget_priority=12)
         # P1-7: durable facts extracted at compaction time render as their own
         # segment. Empty until the first summarization; afterwards it survives
         # lossy message compaction because it lives on the controller, and the
@@ -92,6 +112,8 @@ def build_context_layer(
     memory=None,
     audit=None,
     role_override: str | None = None,
+    persona_text: str = "",
+    recall: Callable[[str], str] | None = None,
 ) -> ContextLayer:
     """Construct a ready-to-use ContextLayer with the base system segments.
 
@@ -119,4 +141,5 @@ def build_context_layer(
                 lambda: get_system_prompt()[0],
                 priority=100, budget_priority=100,
             )
-    return ContextLayer(compact, planner, memory=memory, audit=audit)
+    return ContextLayer(compact, planner, memory=memory, audit=audit,
+                        persona_text=persona_text, recall=recall)

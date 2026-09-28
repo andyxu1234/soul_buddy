@@ -43,7 +43,8 @@ from ..knowledge import (
     IngestWorker, KBStore, KBVectorStore, KnowledgeRetriever,
     OpenAICompatibleEmbedder,
 )
-from ..memory import MemoryDB, MemoryManager
+from ..memory import LongTermMemory, LongTermMemoryWiring, MemoryDB, MemoryManager
+from ..memory import make_extract_provider
 from ..memory.pricing import price
 from ..mcp import ConnectorManager, MCPBridge
 from ..permissions import PermissionPolicy, WorkspaceScope, PermissionGate
@@ -96,6 +97,14 @@ class Runtime:
         # settings page shows current memory even after manual file edits.
         if self.memory_manager is not None:
             self.memory_manager.refresh_user_projections()
+
+        # --- 长期记忆 v3(重构): 全局五层库, 旧表废弃不读 ----------------
+        self.longterm: LongTermMemory | None = None
+        try:
+            self.longterm = LongTermMemory()
+        except Exception as exc:
+            self.audit.append("longterm_init_failed", {"error": str(exc)})
+
 
         # --- Experts(s18):builtin + user 两层专家注册表 ---------------------
         self.experts = ExpertStore()
@@ -325,14 +334,34 @@ class Runtime:
             role_override = expert.system_prompt
         # P0-1: wire the L4 summary layer to the session's provider — without
         # it, long sessions degrade to pure truncation and lose intent.
-        context = build_context_layer(
-            summary_provider=make_summary_provider(provider),
-            on_event=lambda name, data: self.audit.append(
-                "context_event", {"name": name, **data}),
-            memory=self.memory_manager,
-            audit=self.audit,
-            role_override=role_override,
-        )
+        # 长期记忆 v3: 每会话装配 wiring(persona 常驻 + host_files MD 索引 +
+        # 蒸馏 llm), 传给 context(recall 段) 并 attach 供会话结束蒸馏。
+        longterm_wiring = None
+        try:
+            longterm_wiring = LongTermMemoryWiring(
+                workspace_root=session.workspace_root,
+                llm_fn=make_extract_provider(provider) if provider else None)
+            context = build_context_layer(
+                summary_provider=make_summary_provider(provider),
+                on_event=lambda name, data: self.audit.append(
+                    "context_event", {"name": name, **data}),
+                memory=self.memory_manager,
+                audit=self.audit,
+                role_override=role_override,
+                persona_text=longterm_wiring.persona(),
+                recall=longterm_wiring.recall,
+            )
+            context.wiring = longterm_wiring
+        except Exception as exc:
+            self.audit.append("longterm_wiring_failed", {"error": str(exc)})
+            context = build_context_layer(
+                summary_provider=make_summary_provider(provider),
+                on_event=lambda name, data: self.audit.append(
+                    "context_event", {"name": name, **data}),
+                memory=self.memory_manager,
+                audit=self.audit,
+                role_override=role_override,
+            )
         # P5: skills — user-level (~/.soul_buddy/skills) + project-level
         skills = SkillRegistry(workspace_root=session.workspace_root,
                                user_dir=SKILLS_DIR)

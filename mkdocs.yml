@@ -90,6 +90,7 @@ nav:
       - 18 Skills（技能系统）: modules/18-skills.md
       - 19 MCP 连接器: modules/19-mcp.md
       - 20 运行时 Rubric 自评闭环: modules/20-rubric.md
+      - 21 长期记忆 v3: modules/21-longterm-memory.md
   - 问题复盘:
       - 001 工具权限设计: problems/001-tools-permissions-design.md
       - 002 Subagent 阻塞事件循环: problems/002-subagent-blocks-event-loop.md

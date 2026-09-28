@@ -23,6 +23,7 @@
 | [Agent 循环全景图](../architecture-design/agent-loop-map.md) | 主循环每个分支、权限/子代理/压缩子流程、13 张图 |
 | [项目全景思维导图](../architecture-design/architecture-mindmap.md) | 全景导图、目录树、分层架构、模块依赖、阅读路线 |
 | [数据与存储架构](../architecture-design/data-and-storage.md) | 全部持久化资产、事件生命周期、审计链、文件历史 |
+| [长期记忆 v3 重构方案](../architecture-design/longterm-memory-v3-design.md) | MD 档案 + DB 五层蒸馏 + 统一召回三轨架构、DDL、管线、里程碑 |
 | [RAG 管线全景](../architecture-design/rag-pipeline.md) | 资料库索引/查询两条管线、状态机、Milvus schema、降级路径 |
 | [桌面端架构与生命周期](../architecture-design/desktop-architecture.md) | 进程模型、启动/关闭时序、看门狗、安全边界 |
 | [Skills 与 MCP 系统](../architecture-design/skills-and-mcp.md) | 技能生命周期、D1 窄化、连接器信任模型 |
@@ -50,6 +51,7 @@
 | [15-experts.md](./15-experts.md) | `experts/` | M14 专家系统 | P6 | 低 | 4 |
 | [19-mcp.md](./19-mcp.md) | `mcp/` | M15 MCP 连接器 | P5 | 中 | 4 |
 | [20-rubric.md](./20-rubric.md) | `rubric/` + `agent.py` 验收阶段 | M16 运行时交付验收 | P6 | 中 | 8 |
+| [21-longterm-memory.md](./21-longterm-memory.md) | `memory/`（v3 重构） | 长期记忆 v3（轨 A/B/C） | P3 重构 | 中 | 10 |
 
 > 注：`api/` 含 `runtime.py`+`main.py`+9 个 router；`knowledge/` 7 文件；`experts/` 3 文件 + 5 内置预设。
 > 原「16 · Context Compact」已并入 **[10-context.md](./10-context.md)**（§4 深度解析），不再单列。

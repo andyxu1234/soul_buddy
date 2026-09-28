@@ -195,6 +195,12 @@ class SoulAgent:
                                if s.name != "search_knowledge"]
             # system prompt 每轮重组:压缩流程在轮间提取的 durable 事实块、
             # 中途 use_skill 加载的技能内容,都要能进入后续轮次的请求 (P1-7)。
+            # 长期记忆 v3(轨 C): 每轮以当前用户输入为 query 注入召回段。
+            if self.context is not None and getattr(self.context, "wiring", None) is not None:
+                try:
+                    self.context.set_memory_query(text)
+                except Exception:
+                    pass
             system, system_parts = self._system_prompt(session)
 
             # 图片在 buffer 里只是轻引用，wire 阶段才展开成 base64 图片（按分辨率
@@ -580,6 +586,14 @@ class SoulAgent:
             "turns": turn, "truncated": False,
             "rubric_passed": report.passed,
         })
+        # 长期记忆 v3(轨 B): 会话结束后台蒸馏(捕获→抽取→提升)。
+        # LLM 抽取放线程池不阻塞事件循环; wiring 未装配时静默跳过。
+        wiring = getattr(self.context, "wiring", None)
+        if wiring is not None:
+            try:
+                anyio.to_thread.run_sync(wiring.distill, self.storage, session.id)
+            except Exception:
+                pass
         return RunResult(text=text, turns=turn,
                          modified_files=list(modified_files),
                          rubric=report.to_dict())
