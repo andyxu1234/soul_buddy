@@ -37,7 +37,7 @@
 
 * 模型无状态、上下文窗口稀缺：记忆的目标是「什么信息、在什么时候、以什么形式进入上下文」的取舍。
 
-* **记忆 = 内容（存哪、活多久），上下文 = 装配（装什么、预算怎么分）**；记忆必须经过「选择 → 注入」才生效（对接 [10-context.md](../../modules/10-context.md)）。
+* **记忆 = 内容（存哪、活多久），上下文 = 装配（装什么、预算怎么分）**；记忆必须经过「选择 → 注入」才生效（对接 [10-context.md](../modules/10-context.md)）。
 
 * 关键转变：**不再依赖模型主动调结构化工具**写入 key-value，改为两条互补轨：
 
@@ -220,7 +220,7 @@ CREATE TABLE memory_journal (
 
 ***
 
-## 6. 召回管线（轨 C）—— 对接 [10-context.md](../../modules/10-context.md)
+## 6. 召回管线（轨 C）—— 对接 [10-context.md](../modules/10-context.md)
 
 `recall_for_prompt(query, memory, host_files, cfg)` 按阶段执行：
 
@@ -252,7 +252,7 @@ recency: 30 天半衰期衰减  score·0.5^(age_days/30)
 
 3. **render + cache**：渲染为「## Memory Recall」段，同 query 短期缓存。
 
-注入位置：`ContextLayer` 的 `memory` PromptSegment（priority 10），由 `PromptPlanner` 预算拼装（[10-context.md](../../modules/10-context.md) §5.1）。
+注入位置：`ContextLayer` 的 `memory` PromptSegment（priority 10），由 `PromptPlanner` 预算拼装（[10-context.md](../modules/10-context.md) §5.1）。
 
 
 
@@ -359,8 +359,8 @@ recency: 30 天半衰期衰减  score·0.5^(age_days/30)
 
 
 
-* 召回命中段与 persona 均经 `ContextLayer` 注册、`PromptPlanner` 预算拼装、`ContextUsage` 分类统计（[10-context.md](../../modules/10-context.md) §5）。
+* 召回命中段与 persona 均经 `ContextLayer` 注册、`PromptPlanner` 预算拼装、`ContextUsage` 分类统计（[10-context.md](../modules/10-context.md) §5）。
 
-* 蒸馏为**后台异步**（`anyio.to_thread`/ 独立线程），不阻塞 SSE 主循环；LLM 抽取失败只降级不 raise（复用 [10-context.md](../../modules/10-context.md) 的降级哲学）。
+* 蒸馏为**后台异步**（`anyio.to_thread`/ 独立线程），不阻塞 SSE 主循环；LLM 抽取失败只降级不 raise（复用 [10-context.md](../modules/10-context.md) 的降级哲学）。
 
 * 反反馈：注入的「## Memory Recall」回显不进入 raw\_events（避免自我强化）。
