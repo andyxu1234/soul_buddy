@@ -58,6 +58,8 @@ export interface SessionRecord {
   title?: string | null
   /** 绑定专家；null = 普通会话 */
   expert_id?: string | null
+  /** 会话挂载的知识库 id 列表（聊天输入框选择） */
+  kb_ids?: string[]
   created_at: number
   updated_at: number
 }

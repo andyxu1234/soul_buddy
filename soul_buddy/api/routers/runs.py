@@ -180,6 +180,16 @@ async def start_run(body: dict, runtime=Depends(get_runtime)):
         finally:
             runtime._active_runs.pop(session_id, None)
             runtime._active_agents.pop(session_id, None)
+            # 在线回流:回填本 run 中回答实际引用的知识库编号(旁路,失败不外抛)
+            try:
+                from ...knowledge.online import backfill_run_citations
+                kb_store = getattr(runtime, "kb_store", None)
+                if kb_store is not None:
+                    backfill_run_citations(
+                        kb_store, runtime.storage, session_id,
+                        getattr(agent, "request_id", None))
+            except Exception:
+                log.debug("kb citation backfill failed", exc_info=True)
 
     task = asyncio.create_task(_run())
     runtime._active_runs[session_id] = task

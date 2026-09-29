@@ -1,7 +1,7 @@
 """Expert data model (s18: 专家包).
 
 一个专家 = 结构化的角色包:name/role/system_prompt 之外,还带 kb_ids(绑定的
-资料库)。持久化为 JSON 文件,与 skills/subagents 的文件约定一致;SQLite 不参与
+知识库)。持久化为 JSON 文件,与 skills/subagents 的文件约定一致;SQLite 不参与
 (专家是低频读写的配置态,不是派生索引)。
 
 字段与桌面端 ExpertItem 对齐(id/name/role/systemPrompt/enabled/color),
@@ -27,7 +27,7 @@ class Expert:
     system_prompt: str = ""
     enabled: bool = True
     color: str = "#7c3aed"
-    kb_ids: list[str] = field(default_factory=list)   # 绑定的资料库(可多个)
+    kb_ids: list[str] = field(default_factory=list)   # 绑定的知识库(可多个)
     replace_core: bool = False  # True=替换核心身份, False=叠加
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)

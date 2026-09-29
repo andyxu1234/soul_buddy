@@ -3,7 +3,7 @@
 配置(Settings):
   EMBEDDING_BASE_URL / EMBEDDING_API_KEY / EMBEDDING_MODEL / EMBEDDING_DIMS
 
-未配置时 available()=False,资料库检索/索引给出明确报错而不是静默降级。
+未配置时 available()=False,知识库检索/索引给出明确报错而不是静默降级。
 dims=0 时首次调用从响应探测并缓存。批量内部按 64 条一批,429/5xx 指数退避重试。
 """
 from __future__ import annotations
@@ -23,7 +23,7 @@ _TIMEOUT = 60.0
 
 
 class EmbeddingUnavailable(RuntimeError):
-    """embedding 未配置——资料库功能给出可操作的提示。"""
+    """embedding 未配置——知识库功能给出可操作的提示。"""
 
 
 class EmbeddingError(RuntimeError):

@@ -11,11 +11,29 @@ from ...models import EventType
 router = APIRouter(prefix="/api/v1/sessions", tags=["sessions"])
 
 
+def _validate_kb_ids(runtime, raw) -> list[str]:
+    """kb_ids 入参清洗:必须是字符串数组,去重保序,过滤已删除的库。"""
+    if raw is None:
+        return []
+    if not isinstance(raw, list) or any(not isinstance(k, str) for k in raw):
+        raise HTTPException(status_code=400, detail="kb_ids 必须是字符串数组")
+    ids = [k.strip() for k in raw if k.strip()]
+    if runtime.kb_store is not None:
+        ids = [k for k in ids if runtime.kb_store.get_kb(k)]
+    return list(dict.fromkeys(ids))
+
+
 @router.post("", dependencies=[Depends(require_auth)])
 async def create_session(body: dict, runtime=Depends(get_runtime)):
     ws = body.get("workspace_root") or str(DEFAULT_WORK_DIR)
+    expert_id = body.get("expert_id") or None
+    if expert_id is not None and runtime.experts.get(expert_id) is None:
+        raise HTTPException(status_code=404, detail="expert not found")
     rec = runtime.create_session(ws, cwd=body.get("cwd"),
-                                 title=body.get("title"))
+                                 title=body.get("title"),
+                                 expert_id=expert_id,
+                                 kb_ids=_validate_kb_ids(
+                                     runtime, body.get("kb_ids")))
     return rec.to_dict()
 
 
@@ -44,6 +62,8 @@ async def update_session(session_id: str, body: dict,
         if expert_id is not None and runtime.experts.get(expert_id) is None:
             raise HTTPException(status_code=404, detail="expert not found")
         updates["expert_id"] = expert_id
+    if "kb_ids" in body:
+        updates["kb_ids"] = _validate_kb_ids(runtime, body.get("kb_ids"))
     if not updates:
         raise HTTPException(status_code=400, detail="no updatable field provided")
     rec = runtime.update_session(session_id, **updates)

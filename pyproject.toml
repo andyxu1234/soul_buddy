@@ -27,6 +27,17 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio"]
 docs = ["mkdocs-material>=9.5"]
+# RAG 离线评估(RAGAS 生成层指标):可选,sidecar 运行不依赖它。
+# ragas 0.4.x 仍无条件 import langchain_community.chat_models.vertexai,
+# 该模块在 langchain-community 0.4/1.x 里被移除 —— 整个 langchain 栈必须钉在 0.3 线。
+# 安装: uv sync --extra ragas-eval
+ragas-eval = [
+    "ragas>=0.4.3",
+    "langchain>=0.3,<0.4",
+    "langchain-community>=0.3,<0.4",
+    "langchain-core>=0.3,<0.4",
+    "langchain-openai>=0.3,<0.4",
+]
 
 [tool.setuptools]
 packages = ["soul_buddy", "soul_buddy.providers", "soul_buddy.tools",

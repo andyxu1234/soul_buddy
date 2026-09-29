@@ -51,9 +51,13 @@ async function request(method: string, p: string, body?: unknown): Promise<unkno
 const api = {
   getBase: () => API_BASE,
   listSessions: () => request('GET', '/api/v1/sessions'),
-  createSession: (workspace_root: string, cwd?: string, title?: string) =>
-    request('POST', '/api/v1/sessions', { workspace_root, cwd, title }),
-  updateSession: (sessionId: string, fields: { title?: string; provider?: string }) =>
+  createSession: (workspace_root: string, cwd?: string, title?: string,
+                  kb_ids?: string[]) =>
+    request('POST', '/api/v1/sessions', {
+      workspace_root, cwd, title, ...(kb_ids && kb_ids.length ? { kb_ids } : {}),
+    }),
+  updateSession: (sessionId: string, fields: { title?: string; provider?: string;
+                   expert_id?: string | null; kb_ids?: string[] }) =>
     request('PATCH', `/api/v1/sessions/${sessionId}`, fields),
   deleteSession: (sessionId: string) =>
     request('DELETE', `/api/v1/sessions/${sessionId}`),
@@ -110,10 +114,12 @@ const api = {
     request('PATCH', `/api/v1/experts/${encodeURIComponent(expertId)}`, fields),
   deleteExpert: (expertId: string) =>
     request('DELETE', `/api/v1/experts/${encodeURIComponent(expertId)}`),
-  // Knowledge base (资料库): metadata + documents (upload 走 renderer FormData)
+  // Knowledge base (知识库): metadata + documents (upload 走 renderer FormData)
   listKnowledgeBases: () => request('GET', '/api/v1/kb'),
   createKnowledgeBase: (name: string, description: string) =>
     request('POST', '/api/v1/kb', { name, description }),
+  updateKnowledgeBase: (kbId: string, fields: { name?: string; description?: string }) =>
+    request('PATCH', `/api/v1/kb/${encodeURIComponent(kbId)}`, fields),
   deleteKnowledgeBase: (kbId: string) =>
     request('DELETE', `/api/v1/kb/${encodeURIComponent(kbId)}`),
   listKbDocuments: (kbId: string) =>
@@ -126,6 +132,26 @@ const api = {
     request('POST', '/api/v1/kb/search', {
       query, ...(kbIds ? { kb_ids: kbIds } : {}), ...(topK ? { top_k: topK } : {}),
     }),
+  // KB 离线评估:评测集概要 / 启动(后台线程) / 状态 / 报告
+  getKbEvalSet: (kbId: string) =>
+    request('GET', `/api/v1/kb/${encodeURIComponent(kbId)}/eval/set`),
+  startKbEval: (kbId: string, opts?: { top_k?: number; judge?: string;
+               limit?: number; with_ragas?: boolean }) =>
+    request('POST', `/api/v1/kb/${encodeURIComponent(kbId)}/eval/run`, opts ?? {}),
+  getKbEvalStatus: (kbId: string) =>
+    request('GET', `/api/v1/kb/eval/status/${encodeURIComponent(kbId)}`),
+  cancelKbEval: (kbId: string) =>
+    request('POST', `/api/v1/kb/${encodeURIComponent(kbId)}/eval/cancel`),
+  listKbEvalReports: (kbId: string) =>
+    request('GET', `/api/v1/kb/eval/reports?kb_id=${encodeURIComponent(kbId)}`),
+  getLatestKbEvalReport: (kbId: string) =>
+    request('GET', `/api/v1/kb/eval/reports/latest?kb_id=${encodeURIComponent(kbId)}`),
+  // 在线回流:真实 chat 检索事件的聚合(零命中榜/块被引用率/死块)
+  getKbEvalOnline: (kbId?: string) =>
+    request('GET', `/api/v1/kb/eval/online${kbId ? `?kb_id=${encodeURIComponent(kbId)}` : ''}`),
+  appendKbEvalItem: (kbId: string, item: { q: string; type?: string;
+      reference?: string; source?: string }) =>
+    request('POST', `/api/v1/kb/${encodeURIComponent(kbId)}/eval/set/items`, item),
   // LangSmith: effective tracing status (never returns the API key)
   getTracingStatus: () => request('GET', '/api/v1/tracing/status'),
   // Runtime rubric (P6): persisted per-run reports + §7.3 aggregate metrics

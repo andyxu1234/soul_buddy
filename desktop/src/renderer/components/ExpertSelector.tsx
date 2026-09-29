@@ -36,7 +36,7 @@ export function ExpertSelector({ current, onChange }: Props) {
       <button
         className="model-toggle"
         onClick={() => setOpen((v) => !v)}
-        title={active ? `当前专家：${active.name}` : '绑定专家（可基于资料库问答/拷打/面试）'}
+        title={active ? `当前专家：${active.name}` : '绑定专家（可基于知识库问答/拷打/面试）'}
       >
         {active ? (
           <span className="model-dot" style={{ background: active.color }} />

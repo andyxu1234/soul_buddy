@@ -109,7 +109,7 @@ class Runtime:
         # --- Experts(s18):builtin + user 两层专家注册表 ---------------------
         self.experts = ExpertStore()
 
-        # --- Knowledge base(资料库/RAG) --------------------------------------
+        # --- Knowledge base(知识库/RAG) --------------------------------------
         # 任一环节失败都只降级(kb_* = None),不拖垮 sidecar 启动。
         self.kb_store = None
         self.kb_vectors = None
@@ -249,10 +249,13 @@ class Runtime:
     # --- session ------------------------------------------------------------
     def create_session(self, workspace_root: str, cwd: str | None = None,
                        provider: str | None = None,
-                       title: str | None = None) -> SessionRecord:
+                       title: str | None = None,
+                       expert_id: str | None = None,
+                       kb_ids: list[str] | None = None) -> SessionRecord:
         rec = SessionRecord.create(workspace_root, cwd,
                                    provider or self.settings.provider or "offline",
-                                   title=title)
+                                   title=title, expert_id=expert_id,
+                                   kb_ids=kb_ids)
         self.storage.save_session(rec)
         # Keep the derived SQLite index in sync (A20).
         if self.db is not None:
@@ -337,6 +340,10 @@ class Runtime:
         # 长期记忆 v3: 每会话装配 wiring(persona 常驻 + host_files MD 索引 +
         # 蒸馏 llm), 传给 context(recall 段) 并 attach 供会话结束蒸馏。
         longterm_wiring = None
+        # P0-1/P0-2/P2-8: session 级落盘路径 —— history/durable 写到
+        # <session>/history/ 独立目录与 <session>/durable.txt,压缩可回捞、可审计,
+        # 且不归 Externalizer 配额 LRU 管理。
+        session_dir = self.storage._session_dir(session.id, session.workspace_root)
         try:
             longterm_wiring = LongTermMemoryWiring(
                 workspace_root=session.workspace_root,
@@ -350,6 +357,8 @@ class Runtime:
                 role_override=role_override,
                 persona_text=longterm_wiring.persona(),
                 recall=longterm_wiring.recall,
+                session_dir=session_dir,
+                session_id=session.id,
             )
             context.wiring = longterm_wiring
         except Exception as exc:
@@ -361,6 +370,8 @@ class Runtime:
                 memory=self.memory_manager,
                 audit=self.audit,
                 role_override=role_override,
+                session_dir=session_dir,
+                session_id=session.id,
             )
         # P5: skills — user-level (~/.soul_buddy/skills) + project-level
         skills = SkillRegistry(workspace_root=session.workspace_root,
@@ -379,12 +390,18 @@ class Runtime:
         runner_factory = (lambda settings=self.settings, audit=self.audit,
                           storage=self.storage:
                           SubAgentRunner(settings, audit, storage))
-        # 资料库绑定:专家 kb_ids 里仍然存在的库 -> 检索链路(依赖 embedding 配置)。
+        # 知识库绑定:会话挂载(session.kb_ids,聊天输入框选择)+ 专家绑定
+        # (expert.kb_ids)取并集,过滤掉已删除的库;检索链路依赖 embedding 配置。
         kb_summary = None
         knowledge = None
         kb_ids: list[str] = []
-        if expert is not None and expert.kb_ids and self.kb_store is not None:
-            kb_ids = [k for k in expert.kb_ids if self.kb_store.get_kb(k)]
+        if self.kb_store is not None:
+            bound = list(getattr(session, "kb_ids", None) or [])
+            if expert is not None:
+                bound += list(expert.kb_ids or [])
+            # 去重保序,只保留仍然存在的库
+            kb_ids = list(dict.fromkeys(
+                k for k in bound if self.kb_store.get_kb(k)))
             kb_names = [self.kb_store.get_kb(k)["name"] for k in kb_ids]
             if kb_ids and self.kb_retriever is not None \
                     and self.kb_retriever.available():

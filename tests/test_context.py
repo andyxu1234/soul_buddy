@@ -496,3 +496,216 @@ def test_estimate_images_tokens_sums_all_refs(tmp_path):
     # 纯文本消息不计图片
     assert estimate_images_tokens([{"role": "user", "content": "纯文本"}]) == 0
     assert estimate_images_tokens([]) == 0
+
+
+# --- P0-1: compaction offload (history file) + embedded path ------------------
+
+def test_compact_offloads_dropped_turns_to_history_file(tmp_path):
+    def summarizer(_prompt: str) -> str:
+        return "---SUMMARY---\nsummary text\n---DURABLE---\n- Decision: X"
+
+    hist = tmp_path / "history" / "sess1.txt"
+    msgs = _build_big_convo(20)
+    ctrl = CompactController(summary_provider=summarizer,
+                             keep_recent_turns=6,
+                             history_path=hist,
+                             durable_path=tmp_path / "durable.txt")
+    ctrl.compact_if_needed(msgs, "offline")
+    # history file exists and contains the dropped turns (with role markers)
+    assert hist.is_file()
+    body = hist.read_text(encoding="utf-8")
+    assert "[assistant]" in body and "[user]" in body
+    assert "turn 0" in body          # an early dropped turn is recoverable
+    # the summary message embeds the history path for read_file recovery
+    summary_msgs = [m for m in msgs if "Summary of earlier turns" in _message_text(m)]
+    assert summary_msgs
+    assert str(hist) in _message_text(summary_msgs[0])
+
+
+def test_compact_offload_appends_across_multiple_compactions(tmp_path):
+    def summarizer(_prompt: str) -> str:
+        return "---SUMMARY---\nsummary\n---DURABLE---\n- Decision: X"
+
+    hist = tmp_path / "history" / "sess1.txt"
+    ctrl = CompactController(summary_provider=summarizer,
+                             keep_recent_turns=6,
+                             history_path=hist)
+    msgs = _build_big_convo(20)
+    ctrl.compact_if_needed(msgs, "offline")
+    first = hist.read_text(encoding="utf-8")
+    # second compaction on the grown buffer appends, does not overwrite
+    msgs2 = msgs + _build_big_convo(20)
+    ctrl.compact_if_needed(msgs2, "offline")
+    second = hist.read_text(encoding="utf-8")
+    assert second.startswith(first) and len(second) > len(first)
+
+
+def test_offload_disabled_by_default():
+    ctrl = CompactController()
+    assert ctrl.history_path is None
+    assert ctrl._offload_groups([[_assistant("x")]]) is None
+
+
+def test_offload_failure_does_not_raise(tmp_path):
+    def summarizer(_prompt: str) -> str:
+        return "---SUMMARY---\nsummary\n---DURABLE---\n- Decision: X"
+
+    # history path under a *file* (not dir) -> mkdir fails -> must not raise
+    blocker = tmp_path / "blocker"
+    blocker.write_text("occupied", encoding="utf-8")
+    hist = blocker / "history" / "s.txt"
+    events = []
+    msgs = _build_big_convo(20)
+    ctrl = CompactController(summary_provider=summarizer,
+                             on_event=lambda n, d: events.append(n),
+                             keep_recent_turns=6,
+                             history_path=hist)
+    ctrl.compact_if_needed(msgs, "offline")  # must not raise
+    assert any(n == "history_offload_failed" for n in events)
+    assert "Summary of earlier turns" in _message_text(msgs[0])
+
+
+# --- P0-2: durable persistence across controller rebuilds --------------------
+
+def test_durable_persisted_and_reloaded_on_rebuild(tmp_path):
+    def summarizer(_prompt: str) -> str:
+        return "---SUMMARY---\nsummary\n---DURABLE---\n- Decision: keep SQLite WAL"
+
+    durable = tmp_path / "durable.txt"
+    msgs = _build_big_convo(20)
+    ctrl = CompactController(summary_provider=summarizer,
+                             keep_recent_turns=6,
+                             durable_path=durable)
+    ctrl.compact_if_needed(msgs, "offline")
+    assert "SQLite WAL" in ctrl.durable_block
+    assert durable.is_file()
+    assert "SQLite WAL" in durable.read_text(encoding="utf-8")
+    # rebuild the controller (process restart) -> durable facts restored from disk
+    ctrl2 = CompactController(summary_provider=summarizer,
+                              keep_recent_turns=6,
+                              durable_path=durable)
+    assert "SQLite WAL" in ctrl2.durable_block
+
+
+def test_durable_persist_failure_does_not_raise(tmp_path):
+    def summarizer(_prompt: str) -> str:
+        return "---SUMMARY---\nsummary\n---DURABLE---\n- Decision: X"
+
+    blocker = tmp_path / "blocker"
+    blocker.write_text("occupied", encoding="utf-8")
+    events = []
+    msgs = _build_big_convo(20)
+    ctrl = CompactController(summary_provider=summarizer,
+                             on_event=lambda n, d: events.append(n),
+                             keep_recent_turns=6,
+                             durable_path=blocker / "durable.txt")
+    ctrl.compact_if_needed(msgs, "offline")  # must not raise
+    assert any(n == "durable_persist_failed" for n in events)
+    # durable block still held in memory despite the failed write
+    assert "Decision: X" in ctrl.durable_block
+
+
+# --- P0-3: provider-token dual channel in the trigger -------------------------
+
+def test_needs_compact_provider_channel_triggers():
+    # gpt-4o window 128k -> threshold 96k. 1k estimate alone is far below it...
+    assert needs_compact(1_000, "gpt-4o", 0) is False
+    # ...but the provider's official prompt_tokens already exceed it -> trigger
+    assert needs_compact(1_000, "gpt-4o", 0, provider_tokens=100_000) is True
+    # provider channel does not require fixed_overhead (official count has it)
+    assert needs_compact(0, "gpt-4o", 0, provider_tokens=100_000) is True
+    # provider_tokens 0 / None -> fall back to estimate channel
+    assert needs_compact(1_000, "gpt-4o", 0, provider_tokens=0) is False
+    assert needs_compact(1_000, "gpt-4o", 0, provider_tokens=None) is False
+
+
+def test_compact_if_needed_provider_channel_triggers():
+    ctrl = CompactController()
+    msgs = _build_convo(3)  # tiny, estimate way below threshold
+    ctrl.compact_if_needed(msgs, "gpt-4o", 0, provider_tokens=120_000)
+    assert ctrl.last_compacted is True
+    # without provider channel, the same buffer would not compact
+    ctrl2 = CompactController()
+    msgs2 = _build_convo(3)
+    ctrl2.compact_if_needed(msgs2, "gpt-4o", 0)
+    assert ctrl2.last_compacted is False
+
+
+# --- P0-4: context-overflow detection + force_reduce offload ------------------
+
+def test_is_context_overflow_error_matches_provider_messages():
+    from soul_buddy.providers.base import is_context_overflow_error
+
+    class FakeErr(Exception):
+        pass
+
+    assert is_context_overflow_error(
+        RuntimeError("This model's maximum context length is 128000 tokens")) is True
+    assert is_context_overflow_error(
+        Exception("Request too large")) is True
+    assert is_context_overflow_error(
+        Exception("bad gateway")) is False
+    e = FakeErr("prompt is too long")
+    e.code = "context_length_exceeded"
+    assert is_context_overflow_error(e) is True
+
+
+def test_force_reduce_offloads_dropped_turns(tmp_path):
+    hist = tmp_path / "history" / "sess1.txt"
+    msgs = _build_big_convo(30)
+    ctrl = CompactController(keep_recent_turns=6, history_path=hist)
+    ctrl.force_reduce(msgs)
+    assert hist.is_file()
+    body = hist.read_text(encoding="utf-8")
+    assert "turn 0" in body  # an early dropped turn recoverable after force reduce
+    # force_reduce keeps system + leading + most recent group only
+    assistants = sum(1 for m in msgs if m["role"] == "assistant")
+    assert assistants == 1
+
+
+# --- P1-6: tool schema token cache --------------------------------------------
+
+def test_tool_schema_token_cache_reuses_estimate():
+    from soul_buddy.context.usage import (
+        ContextUsageCalculator, _TOOL_SCHEMA_CACHE,
+    )
+
+    class Spec:
+        def __init__(self, name, description, parameters):
+            self.name = name
+            self.description = description
+            self.parameters = parameters
+
+    spec = Spec("read_file", "read a file", {"path": {"type": "string"}})
+    calc = ContextUsageCalculator("offline")
+    t1 = calc._safe_estimate_tools([spec])
+    # same tool schema -> cache hit, identical number
+    t2 = calc._safe_estimate_tools([spec])
+    assert t1 == t2
+    # different schema still estimable, does not poison the cache key
+    spec2 = Spec("write_file", "write a file", {"content": {"type": "string"}})
+    t3 = calc._safe_estimate_tools([spec2])
+    assert t3 > 0
+    assert t1 != t3
+    # cache did grow (only the new key was added)
+    assert len(_TOOL_SCHEMA_CACHE) >= 2
+
+
+def test_context_usage_calc_tool_total_matches_shared_estimator():
+    from soul_buddy.context.usage import ContextUsageCalculator
+
+    calc = ContextUsageCalculator("offline")
+    assert calc.calc("sys", {}, [], [], 0).total > 0
+    assert calc.calc("sys", {}, [{"role": "user", "content": "hi"}], [], 0).messages > 0
+
+
+# --- P1-7: unified estimated_total in the trigger -----------------------------
+
+def test_needs_compact_uses_estimated_total_when_provided():
+    # offline window 8k -> threshold 6k. 1k text estimate is below it...
+    assert needs_compact(1_000, "offline", 0) is False
+    # ...but the display-side estimated_total already counts it as over -> trigger
+    assert needs_compact(1_000, "offline", 0, estimated_total=8_000) is True
+    # provider channel still independent of estimated_total
+    assert needs_compact(1_000, "offline", 0, provider_tokens=7_000,
+                         estimated_total=0) is True

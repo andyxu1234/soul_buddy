@@ -12,7 +12,12 @@ import tempfile
 # load_dotenv(override=False) never overwrites an existing variable.
 for _var in ("MILVUS_URI", "EMBEDDING_BASE_URL", "EMBEDDING_API_KEY",
              "EMBEDDING_MODEL", "EMBEDDING_DIMS", "SOUL_PROVIDER",
-             "TYPESAFE_API_KEY"):
+             "TYPESAFE_API_KEY",
+             # 开发机全局环境里的真实 key 不得泄漏进测试(封套原则);
+             # 否则 RAGAS/rubric judge 会在测试里真的调外部 LLM。
+             "DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
+             "SILICONFLOW_API_KEY", "XIAOMI_API_KEY",
+             "SOUL_RAGAS_JUDGE_PROVIDER"):
     os.environ[_var] = ""
 
 _TMP_HOME = tempfile.mkdtemp(prefix="soul_test_home_")

@@ -1,8 +1,9 @@
 interface SoulApi {
   getBase: () => string
   listSessions: () => Promise<unknown>
-  createSession: (workspace_root: string, cwd?: string, title?: string) => Promise<unknown>
-  updateSession: (sessionId: string, fields: { title?: string; provider?: string; expert_id?: string | null }) => Promise<unknown>
+  createSession: (workspace_root: string, cwd?: string, title?: string,
+    kbIds?: string[]) => Promise<unknown>
+  updateSession: (sessionId: string, fields: { title?: string; provider?: string; expert_id?: string | null; kb_ids?: string[] }) => Promise<unknown>
   deleteSession: (sessionId: string) => Promise<unknown>
   getHistory: (sessionId: string) => Promise<unknown>
   startRun: (sessionId: string, prompt: string,
@@ -34,11 +35,23 @@ interface SoulApi {
   deleteExpert: (expertId: string) => Promise<unknown>
   listKnowledgeBases: () => Promise<unknown>
   createKnowledgeBase: (name: string, description: string) => Promise<unknown>
+  updateKnowledgeBase: (kbId: string, fields: { name?: string; description?: string }) => Promise<unknown>
   deleteKnowledgeBase: (kbId: string) => Promise<unknown>
   listKbDocuments: (kbId: string) => Promise<unknown>
   deleteKbDocument: (kbId: string, docId: string) => Promise<unknown>
   reindexKbDocument: (kbId: string, docId: string) => Promise<unknown>
   kbSearch: (query: string, kbIds?: string[], topK?: number) => Promise<unknown>
+  getKbEvalSet: (kbId: string) => Promise<KbEvalSetInfo>
+  startKbEval: (kbId: string, opts?: { top_k?: number; judge?: string;
+    limit?: number; with_ragas?: boolean }) => Promise<unknown>
+  getKbEvalStatus: (kbId: string) => Promise<KbEvalJob>
+  cancelKbEval: (kbId: string) => Promise<unknown>
+  listKbEvalReports: (kbId: string) => Promise<{ reports: KbEvalReportRow[] }>
+  getLatestKbEvalReport: (kbId: string) => Promise<{ report: KbEvalReport | null;
+    job: Partial<KbEvalJob> }>
+  getKbEvalOnline: (kbId?: string) => Promise<KbOnlineSummary>
+  appendKbEvalItem: (kbId: string, item: { q: string; type?: string;
+    reference?: string; source?: string }) => Promise<{ status: string; count: number }>
   listRubricReports: (limit?: number, offset?: number, mode?: string, model?: string) => Promise<unknown>
   getRubricSummary: (model?: string) => Promise<unknown>
   getTracingStatus: () => Promise<unknown>
@@ -81,9 +94,9 @@ export function sessionUploadUrl(sessionId: string, file: string): string {
 export const api = {
   getBase: () => getSoul().getBase(),
   listSessions: () => getSoul().listSessions() as Promise<any[]>,
-  createSession: (workspace_root: string, cwd?: string, title?: string) =>
-    getSoul().createSession(workspace_root, cwd, title) as Promise<any>,
-  updateSession: (sid: string, fields: { title?: string; provider?: string; expert_id?: string | null }) =>
+  createSession: (workspace_root: string, cwd?: string, title?: string, kbIds?: string[]) =>
+    getSoul().createSession(workspace_root, cwd, title, kbIds) as Promise<any>,
+  updateSession: (sid: string, fields: { title?: string; provider?: string; expert_id?: string | null; kb_ids?: string[] }) =>
     getSoul().updateSession(sid, fields) as Promise<any>,
   deleteSession: (sid: string) =>
     getSoul().deleteSession(sid) as Promise<any>,
@@ -164,6 +177,8 @@ export const api = {
     getSoul().listKnowledgeBases() as Promise<{ kbs: KbRow[] }>,
   createKnowledgeBase: (name: string, description: string) =>
     getSoul().createKnowledgeBase(name, description) as Promise<KbRow>,
+  updateKnowledgeBase: (kbId: string, fields: { name?: string; description?: string }) =>
+    getSoul().updateKnowledgeBase(kbId, fields) as Promise<KbRow>,
   deleteKnowledgeBase: (kbId: string) =>
     getSoul().deleteKnowledgeBase(kbId) as Promise<{ status: string; kb_id: string }>,
   listKbDocuments: (kbId: string) =>
@@ -191,6 +206,25 @@ export const api = {
       results: Array<{ doc_name: string; heading_path: string; text: string; score: number }>
       count: number
     }>,
+  getKbEvalSet: (kbId: string) =>
+    getSoul().getKbEvalSet(kbId) as Promise<KbEvalSetInfo>,
+  startKbEval: (kbId: string, opts?: { top_k?: number; judge?: string;
+    limit?: number; with_ragas?: boolean }) =>
+    getSoul().startKbEval(kbId, opts) as Promise<{ status: string; n_items: number }>,
+  getKbEvalStatus: (kbId: string) =>
+    getSoul().getKbEvalStatus(kbId) as Promise<KbEvalJob>,
+  cancelKbEval: (kbId: string) =>
+    getSoul().cancelKbEval(kbId) as Promise<{ status: string }>,
+  listKbEvalReports: (kbId: string) =>
+    getSoul().listKbEvalReports(kbId) as Promise<{ reports: KbEvalReportRow[] }>,
+  getLatestKbEvalReport: (kbId: string) =>
+    getSoul().getLatestKbEvalReport(kbId) as Promise<{ report: KbEvalReport | null;
+      job: Partial<KbEvalJob> }>,
+  getKbEvalOnline: (kbId?: string) =>
+    getSoul().getKbEvalOnline(kbId) as Promise<KbOnlineSummary>,
+  appendKbEvalItem: (kbId: string, item: { q: string; type?: string;
+    reference?: string; source?: string }) =>
+    getSoul().appendKbEvalItem(kbId, item) as Promise<{ status: string; count: number }>,
   // Runtime rubric (P6): persisted reports + aggregated §7.3 dashboard metrics
   listRubricReports: (limit?: number, offset?: number, mode?: string, model?: string) =>
     getSoul().listRubricReports(limit, offset, mode, model) as Promise<{
@@ -249,6 +283,94 @@ export interface ExpertRow {
   replaceCore: boolean
   createdAt: number
   updatedAt: number
+}
+
+/** KB 离线评估:评测集概要 / 后台任务状态。 */
+export interface KbEvalSetInfo {
+  exists: boolean
+  count: number
+  hash: string | null
+}
+
+export interface KbEvalJob {
+  status: 'idle' | 'running' | 'done' | 'error' | 'cancelled'
+  started_at?: number
+  error?: string | null
+  report_path?: string | null
+  /** 进度:retrieval / answers / ragas 三阶段 */
+  stage?: string
+  done?: number
+  total?: number
+}
+
+export interface KbEvalReport {
+  meta: {
+    kb_id: string
+    created_at: number
+    evalset_hash: string
+    top_k: number
+    n_items: number
+    tested_provider: string
+    tested_model: string
+    report_path?: string
+  }
+  retrieval: {
+    n_gold: number
+    'hit@k': number
+    'recall@k': number
+    mrr: number
+    'ndcg@k': number
+    latency_ms_p50: number
+    latency_ms_p95: number
+    top_k: number
+    by_type?: Record<string, { n_gold: number; 'hit@k': number;
+      'recall@k': number; mrr: number; 'ndcg@k': number }>
+  }
+  ragas: {
+    enabled: boolean
+    skipped?: string
+    metrics?: Record<string, { mean: number | null; n: number; errors: number;
+      skipped: number }>
+    judge_model?: string
+    judge_provider?: string
+    elapsed_s?: number
+  }
+  mechanical: {
+    refuse_ok: number | null
+    refuse_total: number
+    cite_ok: number | null
+    cite_total: number
+  }
+  per_item?: Array<{ id: string; q: string; answer: string }>
+}
+
+/** 在线回流聚合(真实 chat 的 search_knowledge 事件)。 */
+export interface KbOnlineSummary {
+  total: number
+  zero_hit_count: number
+  zero_hit_rate: number | null
+  avg_latency_ms: number | null
+  avg_hits: number | null
+  blocks_seen: number
+  citation_rate: number | null
+  zero_hit_list: Array<{ id: number; created_at: number;
+    user_query?: string | null; rewritten?: string | null; kb_ids: string[] }>
+  dead_blocks: Array<{ doc_name: string; heading_path: string; seen: number;
+    cited: number }>
+  recent: Array<{ id: number; created_at: number;
+    user_query?: string | null; rewritten?: string | null; kb_ids: string[];
+    hit_count: number; latency_ms: number; cited_pos: number[];
+    answered: boolean }>
+}
+
+/** list_reports 的轻量行(不含 bad cases 明细)。 */
+export interface KbEvalReportRow {
+  path: string
+  mtime: number
+  meta: KbEvalReport['meta']
+  retrieval: Partial<KbEvalReport['retrieval']>
+  ragas?: KbEvalReport['ragas']['metrics']
+  mechanical?: Partial<KbEvalReport['mechanical']>
 }
 
 /** One scored dimension inside a rubric report. */

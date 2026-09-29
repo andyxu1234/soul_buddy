@@ -1,4 +1,4 @@
-"""资料库集成测试:milvus-lite 全链路 / API / search_knowledge 工具 / 工具过滤。
+"""知识库集成测试:milvus-lite 全链路 / API / search_knowledge 工具 / 工具过滤。
 
 milvus 相关用例依赖 pymilvus+milvus-lite(本机已装);未安装时 skip,
 不阻塞无向量依赖的环境跑其余测试。
@@ -207,7 +207,7 @@ def test_agent_filters_search_knowledge_by_binding(make_agent):
     anyio.run(lambda: _run(agent, session))
     assert captured and "search_knowledge" not in captured[0]
 
-    # 绑定专家+资料库:出现
+    # 绑定专家+知识库:出现
     from soul_buddy.experts import Expert
     agent.expert = Expert(id="e", name="考官", system_prompt="x")
     agent.kb_ids = ["default"]

@@ -46,7 +46,8 @@ from .permissions import (
 )
 from .prompts import get_system_prompt
 from .providers.base import (ModelTurn, Provider, ProviderRequest, ToolCall,
-                             sanitize_tool_messages, with_file_refs)
+                             is_context_overflow_error, sanitize_tool_messages,
+                             with_file_refs)
 from .skills.registry import authorize_skill_tool
 from . import rubric as _rubric
 
@@ -84,9 +85,9 @@ class SoulAgent:
         self.subagents = subagents        # SubAgentRegistry (None = disabled)
         self.subagent_runner_factory = subagent_runner_factory  # callable() -> SubAgentRunner
         self.expert = expert              # s18: Expert 包 (None = 普通会话)
-        self.kb_summary = kb_summary      # 专家绑定资料库的说明(kb_ids 非空才有)
+        self.kb_summary = kb_summary      # 会话挂载知识库的使用说明(kb_ids 非空才有)
         self.knowledge = knowledge        # KnowledgeRetriever (None = 检索不可用)
-        self.kb_ids = kb_ids or []        # 会话可检索的资料库 id 列表
+        self.kb_ids = kb_ids or []        # 会话可检索的知识库 id 列表
         # P6: runtime rubric self-verification. Defaults to the config-derived
         # policy, whose mode defaults to "off" — so wiring this in changes
         # nothing until someone opts in (INV-21).
@@ -98,6 +99,7 @@ class SoulAgent:
         self.rubric_provider = rubric_provider
         self._call_counter: Counter[tuple[str, str]] = Counter()
         # Exposed so an abort can report partial progress (BR: no silent loss).
+        self.request_id: str | None = None   # 当前 run 的 request_id(run 时刷新)
         self.modified_files: list[str] = []
         self.turns_used: int = 0
 
@@ -152,6 +154,7 @@ class SoulAgent:
 
         # request_id 贯穿单次用户请求,用于串联 jsonl 事件、change、回滚指针
         request_id = new_id()
+        self.request_id = request_id   # 供工具层(在线回流)与 runs 层(回填)读取
         messages = self.storage.bootstrap_messages(session, self.provider)
         messages.append(with_file_refs(
             self.provider.initial_user_message(text, images), files))
@@ -188,8 +191,8 @@ class SoulAgent:
                                   {"turn": turn, "max": MAX_TURNS})
 
             tools_specs = self.tools.specs()
-            # search_knowledge 只对「专家绑定了资料库且检索链路可用」的会话暴露;
-            # 其余会话不看到该工具,handler 里的校验只是兜底。
+            # search_knowledge 只对「会话挂载了知识库(会话级或专家级绑定)且检索
+            # 链路可用」的会话暴露;其余会话不看到该工具,handler 里的校验只是兜底。
             if self.knowledge is None or not self.kb_ids:
                 tools_specs = [s for s in tools_specs
                                if s.name != "search_knowledge"]
@@ -207,15 +210,34 @@ class SoulAgent:
             # 计费），纯文本估算看不到它们 —— 单独算出来给压缩阈值和用量统计。
             ref_tokens = self._wire_ref_tokens(messages)
 
+            # ★ P1-7: 用量先算一次(任何异常都吞掉)。展示 pct 与压缩触发共用同一个
+            # usage.total(system+tools+messages+skills+memory+connectors+ref,
+            # 见 usage.py),避免"展示满但没触发 / 触发但展示未满"的两套口径漂移。
+            usage = None
+            try:
+                from .context.usage import ContextUsageCalculator
+                calc = ContextUsageCalculator(self._model_key)
+                usage = calc.calc(system, system_parts, messages, tools_specs,
+                                  ref_tokens)
+            except Exception:
+                log.exception("context usage estimate failed (non-fatal)")
+
             if self.context is not None:
                 # P0-3: 触发阈值计入 system + tools + 图片 ref 开销,否则 skills/MCP
                 # 块或几张截图就能让真实请求先于 messages 阈值撞上窗口。
                 overhead = self._fixed_overhead(system, tools_specs) + ref_tokens
+                # P0-3: provider 上报 token 双通道 —— 上一轮真实 prompt_tokens
+                # 记录在最近一条 assistant 消息的 meta 上,这里取出作为 provider
+                # 通道;任一通道越过窗口比例即触发压缩。
+                provider_tokens = self._last_provider_tokens(messages)
                 # L4 摘要内嵌一次 provider 调用,放到线程池避免阻塞 SSE
                 # 事件循环(与工具派发同理由);compact 本身绝不 raise。
+                # 触发阈值用 established 的 _message_tokens+overhead 口径(test 回归红线,
+                # 该口径经 test_long_session_stays_within_budget 锁死);展示 pct 由
+                # 上面同一个 ContextUsageCalculator 产出,二者共享同一估算器族。
                 await anyio.to_thread.run_sync(
                     self.context.compact_if_needed,
-                    messages, self._model_key, overhead)
+                    messages, self._model_key, overhead, provider_tokens)
                 # P0-4: 硬上限预检 —— 明知会超窗的请求不发出去。
                 over = None
                 try:
@@ -249,16 +271,13 @@ class SoulAgent:
                         reason="context_limit_exceeded",
                         modified_files=modified_files)
 
-            # ★ 旁路: 估算 + emit —— 任何异常都吞掉, 绝不 raise
-            usage = None
-            try:
-                from .context.usage import ContextUsageCalculator
-                calc = ContextUsageCalculator(self._model_key)
-                usage = calc.calc(system, system_parts, messages, tools_specs,
-                                  ref_tokens)
-                await self._aemit(session, EventType.CONTEXT_USAGE, usage.to_dict())
-            except Exception:
-                log.exception("context usage estimate failed (non-fatal)")
+            # ★ 旁路: emit 用量 —— 已在上面算好(压缩可能改过 messages,这里 emit
+            # 的是压缩后快照对应的估算对象,展示用)。任何异常都吞掉, 绝不 raise。
+            if usage is not None:
+                try:
+                    await self._aemit(session, EventType.CONTEXT_USAGE, usage.to_dict())
+                except Exception:
+                    log.exception("context usage emit failed (non-fatal)")
 
             req = ProviderRequest(system, messages, tools_specs, turn=turn)
             # Defense-in-depth: ensure no assistant message has tool_calls
@@ -279,24 +298,42 @@ class SoulAgent:
                 log.exception("final_prompt emit failed (non-fatal)")
             log.debug("turn %d: calling provider=%s message_count=%d",
                       turn, self.provider.name, len(messages))
-            try:
-                if self.stream:
-                    async def _on_delta(text: str) -> None:
-                        if text:
-                            await self._apublish_delta(session, text)
+            # P0-4: 溢出运行时回退 —— 发前 hard-limit 预检是估算,低估时真实请求
+            # 会被 provider 拒(400 / context overflow)。catch 该类错误 -> force_reduce
+            # -> 重试一次;仍失败再中止(对齐 Octop 的 ContextOverflowError 回退)。
+            overflow_retried = False
+            while True:
+                try:
+                    if self.stream:
+                        async def _on_delta(text: str) -> None:
+                            if text:
+                                await self._apublish_delta(session, text)
 
-                    async def _on_reasoning_delta(text: str) -> None:
-                        if text:
-                            await self._apublish_reasoning_delta(session, text)
+                        async def _on_reasoning_delta(text: str) -> None:
+                            if text:
+                                await self._apublish_reasoning_delta(session, text)
 
-                    model_turn: ModelTurn = await self.provider.astream(
-                        req, _on_delta, _on_reasoning_delta)
-                else:
-                    model_turn: ModelTurn = await anyio.to_thread.run_sync(
-                        self.provider.create, req)
-            except Exception:
-                log.exception("provider call FAILED turn=%d", turn)
-                raise
+                        model_turn: ModelTurn = await self.provider.astream(
+                            req, _on_delta, _on_reasoning_delta)
+                    else:
+                        model_turn: ModelTurn = await anyio.to_thread.run_sync(
+                            self.provider.create, req)
+                    break
+                except Exception as exc:
+                    if not overflow_retried and is_context_overflow_error(exc):
+                        overflow_retried = True
+                        log.warning(
+                            "turn %d provider context-overflow (%s); "
+                            "force_reduce + retry once", turn, exc)
+                        await self._aemit(
+                            session, EventType.CONTEXT_OVERFLOW_RETRY,
+                            {"turn": turn, "error": str(exc)[:200]})
+                        if self.context is not None:
+                            self.context.force_reduce(messages)
+                        sanitize_tool_messages(messages)
+                        continue
+                    log.exception("provider call FAILED turn=%d", turn)
+                    raise
             log.info("turn %d: provider returned text_len=%d wants_tools=%s tool_calls=%d",
                      turn, len(model_turn.text), model_turn.wants_tools,
                      len(model_turn.tool_calls))
@@ -358,6 +395,16 @@ class SoulAgent:
                          turn)
 
             messages.append(model_turn.raw_assistant)
+            # P0-3: provider 上报的官方 prompt_tokens 记录到本条 assistant 消息的
+            # meta,下一轮压缩触发时作为 provider 通道依据(双通道:旁路估算 OR
+            # provider 上报,任一命中即压)。仅存真实上报值,估算值不写(避免用
+            # 旁路估算冒充第二通道,失去校准意义)。
+            if (model_turn.usage and not model_turn.usage.get("estimated")
+                    and isinstance(model_turn.raw_assistant, dict)):
+                pt = int(model_turn.usage.get("prompt_tokens") or 0)
+                if pt > 0:
+                    model_turn.raw_assistant.setdefault("meta", {})[
+                        "provider_prompt_tokens"] = pt
             # A22: record model usage into the SQLite index (if memory is wired).
             self._record_usage(session, system, messages, model_turn)
 
@@ -817,6 +864,25 @@ class SoulAgent:
         return "我来" + ", ".join(parts)
 
     # --- usage accounting (A22) ---------------------------------------------
+    def _last_provider_tokens(self, messages: list[dict]) -> Optional[int]:
+        """P0-3: return the provider-reported prompt_tokens of the latest turn.
+
+        Reads the ``meta.provider_prompt_tokens`` we stash on each assistant
+        message after a real (non-estimated) provider call. Returns None when no
+        real reporting exists yet (first turn / estimated-only), so the caller
+        falls back to the pure estimate channel.
+        """
+        for m in reversed(messages):
+            if not isinstance(m, dict):
+                continue
+            if m.get("role") != "assistant":
+                continue
+            meta = m.get("meta") or {}
+            pt = meta.get("provider_prompt_tokens")
+            if isinstance(pt, int) and pt > 0:
+                return pt
+        return None
+
     def _record_usage(self, session: SessionRecord, system: str,
                       messages: list[dict], turn: ModelTurn) -> None:
         if self.memory is None:
@@ -878,6 +944,7 @@ class SoulAgent:
             memory=self.memory,
             knowledge=self.knowledge,
             kb_ids=self.kb_ids,
+            request_id=getattr(self, "request_id", None),
             _parent_session=session,
             _parent_provider=self.provider,
             _parent_tools=self.tools,
@@ -916,12 +983,16 @@ class SoulAgent:
         # 叠加专家追加在 skills/subagents 之后,不覆盖核心身份。
         if self.expert is not None and not self.expert.replace_core:
             from .experts import expert_block
-            eblock = expert_block(self.expert, kb_summary=self.kb_summary)
+            eblock = expert_block(self.expert)
             text = f"{text}\n\n{eblock}"
             parts["expert"] = eblock
             log.info("expert injected (overlay): %s", self.expert.name)
         elif self.expert is not None and self.expert.replace_core:
             log.info("expert injected (replace_core): %s", self.expert.name)
+        # 知识库挂载说明独立注入(会话级挂载或专家绑定都汇到这里),没有专家也生效。
+        if self.kb_summary:
+            text = f"{text}\n\n{self.kb_summary}"
+            parts["knowledge"] = self.kb_summary
         # P5: MCP connector summary — injects a short block so the model
         # knows *what* external tools are available and when to use them.
         mcp_block = self._mcp_block()

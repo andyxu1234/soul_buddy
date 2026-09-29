@@ -12,6 +12,7 @@ import threading
 from pathlib import Path
 
 from .chunker import chunk_text
+from .cleaner import clean_text
 from .embedder import OpenAICompatibleEmbedder
 from .parser import extract_text
 from .store import KBStore
@@ -89,6 +90,10 @@ class IngestWorker:
             text = extract_text(source, doc["ext"])
             if not text.strip():
                 raise ValueError("解析结果为空（扫描版 PDF 或空文件）")
+            # 1b. 清洗:去页眉页脚/页码、零宽字符、压多余空白(脏数据进 RAG 即脏答案)
+            text = clean_text(text)
+            if not text.strip():
+                raise ValueError("清洗后内容为空（全文均为页眉页脚）")
             # 2. 分块
             self.store.set_status(doc_id, "chunking")
             chunks = chunk_text(text, title=doc["filename"],

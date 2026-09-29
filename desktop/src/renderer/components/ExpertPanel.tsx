@@ -195,7 +195,7 @@ function ExpertForm({
     let cancelled = false
     api.listKnowledgeBases()
       .then((res) => { if (!cancelled) setKbs(res.kbs) })
-      .catch(() => { /* 资料库不可用时隐藏绑定区 */ })
+      .catch(() => { /* 知识库不可用时隐藏绑定区 */ })
     return () => { cancelled = true }
   }, [])
 
@@ -309,7 +309,7 @@ function ExpertForm({
           </div>
           {kbs.length > 0 && (
             <div className="field">
-              <label className="field-label">绑定资料库（绑定后可通过检索工具引用文档回答）</label>
+              <label className="field-label">绑定知识库（绑定后可通过检索工具引用文档回答）</label>
               <div className="kb-bind-list">
                 {kbs.map((k) => (
                   <label key={k.id} className="kb-bind-item">

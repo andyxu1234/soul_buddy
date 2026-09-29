@@ -111,16 +111,24 @@ class SubAgentRunner:
                 log.warning("sub-agent %s model override %s failed: %s",
                             cfg.name, cfg.model, exc)
 
-        # P1-9: sub-agent 独立压缩控制器 —— 长探索任务与主循环共享同一个
-        # provider 窗口;历史下限更小(keep 4),摘要层失败自动降级为纯剪枝。
+        # P2-9: sub-agent 复用公共 CompactController —— 与主循环共享同一实现
+        # (参数化 keep_recent_turns),历史下限更小(keep 4),摘要层失败自动降级
+        # 为纯剪枝,避免两套实现漂移。复用主会话的 history/durable 落盘路径
+        # (P0-1/P0-2/P2-8),子 agent 压缩同样可回捞、可审计。
+        from ..config import DURABLE_FILENAME, HISTORY_FILENAME, HISTORY_SUBDIR
         from ..context import make_summary_provider
         from ..context.compact import CompactController
+        sdir = self.storage._session_dir(parent_session.id,
+                                         parent_session.workspace_root)
         compact = CompactController(
             summary_provider=make_summary_provider(provider),
             on_event=lambda name, data: self.audit.append(
                 "subagent_context_event",
                 {"name": name, "subagent": cfg.name, **data}),
             keep_recent_turns=SUBAGENT_KEEP_RECENT_TURNS,
+            history_path=sdir / HISTORY_SUBDIR / HISTORY_FILENAME.format(
+                session_id=parent_session.id),
+            durable_path=sdir / DURABLE_FILENAME,
         )
 
         # 2. 构建收窄的 ToolRegistry:只保留 cfg.tools 声明的工具
@@ -129,8 +137,6 @@ class SubAgentRunner:
         # 3. 权限层 + ToolContext
         scope = WorkspaceScope(parent_session.workspace_root)
         policy = PermissionPolicy(scope)
-        sdir = self.storage._session_dir(parent_session.id,
-                                         parent_session.workspace_root)
         ctx = ToolContext(
             session_id=parent_session.id,  # 审计用同一个 session_id 串起来
             workspace_root=parent_session.workspace_root,

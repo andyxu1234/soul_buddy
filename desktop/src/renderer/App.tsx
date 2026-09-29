@@ -9,6 +9,7 @@ import { SettingsModal } from './components/SettingsModal'
 import { SkillsPanel } from './components/SkillsPanel'
 import { ExpertPanel } from './components/ExpertPanel'
 import { KnowledgePanel } from './components/KnowledgePanel'
+import { KbEvalPage } from './components/KbEvalPanel'
 import { AttuPanel } from './components/AttuPanel'
 import { McpPanel } from './components/McpPanel'
 import { RubricPanel } from './components/RubricPanel'
@@ -65,6 +66,8 @@ export default function App() {
   const [pendingImages, setPendingImages] = useState<ImageAttachment[]>([])
   // 主 composer 的待发送文件附件（只持句柄，发送时才读内容）
   const [pendingFiles, setPendingFiles] = useState<FileAttachment[]>([])
+  // 空状态 composer 里待挂载的知识库（新会话创建时写入 kb_ids）
+  const [pendingKbIds, setPendingKbIds] = useState<string[]>([])
   const [perms, setPerms] = useState<PermissionRequest[]>([])
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
   const [streamText, setStreamText] = useState('')
@@ -340,12 +343,13 @@ export default function App() {
                                        images: ImageAttachment[] = [],
                                        files: FileAttachment[] = []) => {
     if (!prompt.trim() && images.length === 0 && files.length === 0) return
-    api.createSession(workspaceRoot, undefined, prompt.slice(0, 30) || '附件任务')
+    api.createSession(workspaceRoot, undefined, prompt.slice(0, 30) || '附件任务', pendingKbIds)
       .then((s) => {
         const rec = s as SessionRecord
         setSessions((prev) => [rec, ...prev])
         setSelectedId(rec.id)
         setActiveView('chat')
+        setPendingKbIds([])
         // 切到新 session 后自动启动运行
         try {
           const call = (async () => {
@@ -398,6 +402,19 @@ export default function App() {
         const rec = s as SessionRecord
         setSessions((prev) => prev.map((x) => (x.id === rec.id ? rec : x)))
         pushToast(expertId ? '已绑定专家，下一轮生效' : '已解绑专家', 'ok')
+      })
+      .catch((e) => pushToast(formatError(e), 'err'))
+  }
+
+  const handleKbChange = (kbIds: string[]) => {
+    if (!selectedId) return
+    api.updateSession(selectedId, { kb_ids: kbIds })
+      .then((s) => {
+        const rec = s as SessionRecord
+        setSessions((prev) => prev.map((x) => (x.id === rec.id ? rec : x)))
+        pushToast(kbIds.length
+          ? `已挂载 ${kbIds.length} 个知识库，下一轮生效`
+          : '已取消挂载知识库', 'ok')
       })
       .catch((e) => pushToast(formatError(e), 'err'))
   }
@@ -510,6 +527,8 @@ export default function App() {
         <ExpertPanel onToast={pushToast} />
       ) : activeView === 'knowledge' ? (
         <KnowledgePanel onToast={pushToast} />
+      ) : activeView === 'kbeval' ? (
+        <KbEvalPage onToast={pushToast} />
       ) : activeView === 'attu' ? (
         <AttuPanel />
       ) : activeView === 'mcp' ? (
@@ -543,6 +562,7 @@ export default function App() {
             onPermModeChange={setPermMode}
             onProviderChange={handleProviderChange}
             onExpertChange={handleExpertChange}
+            onKbChange={handleKbChange}
             onToast={pushToast}
             onStartNewSession={handleStartNewSession}
             onNavigate={(v) => setActiveView(v)}
@@ -550,6 +570,8 @@ export default function App() {
             onPendingImagesChange={setPendingImages}
             pendingFiles={pendingFiles}
             onPendingFilesChange={setPendingFiles}
+            pendingKbIds={pendingKbIds}
+            onPendingKbIdsChange={setPendingKbIds}
             mode={selectedId ? sessionMode[selectedId] : undefined}
             onModeChange={handleModeChange}
           />

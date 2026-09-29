@@ -1,7 +1,7 @@
 import { Icon } from './Icon'
 
-const ATTU_URL = 'http://192.168.1.9:8000'
-const MILVUS_HOST = '192.168.1.9'
+const ATTU_URL = 'http://192.168.1.10:8000'
+const MILVUS_HOST = '192.168.1.10'
 const MILVUS_GRPC_PORT = 19530
 const MILVUS_HTTP_PORT = 9091
 

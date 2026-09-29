@@ -35,7 +35,8 @@ class ToolContext:
     subagent_runner: object = None    # callable() -> SubAgentRunner factory
     memory: object = None             # MemoryManager (None = memory tools disabled)
     knowledge: object = None          # KnowledgeRetriever (None = search_knowledge 不可用)
-    kb_ids: list[str] | None = None   # 会话专家绑定的资料库 id 列表
+    kb_ids: list[str] | None = None   # 会话挂载的知识库 id 列表(会话级+专家级)
+    request_id: str | None = None   # 当前 run 的 request_id(在线回流关联用)
     _parent_session: object = None    # 父 session,供 task 工具读取
     _parent_provider: object = None   # 父 provider,供 task 工具继承
     _parent_tools: object = None      # 父 ToolRegistry,供 task 工具收窄

@@ -8,6 +8,7 @@ import { sessionTitle } from './SessionList'
 import { PlusMenu, type AgentMode } from './PlusMenu'
 import { PermissionDropdown } from './PermissionDropdown'
 import { ExpertSelector } from './ExpertSelector'
+import { KnowledgeSelector } from './KnowledgeSelector'
 import { ModelSelector } from './ModelSelector'
 import { api, native } from '../api'
 import { EmotionBall } from './EmotionBall'
@@ -44,6 +45,8 @@ interface Props {
   onPermModeChange: (mode: 'default' | 'allow_all') => void
   onProviderChange: (provider: string) => void
   onExpertChange?: (expertId: string | null) => void
+  /** 切换当前会话挂载的知识库（会话级 kb_ids） */
+  onKbChange?: (kbIds: string[]) => void
   onToast: (msg: string, tone?: 'ok' | 'err' | 'info') => void
   /** Agent 模式（前端 mock，后端暂不处理） */
   mode?: AgentMode
@@ -56,8 +59,11 @@ interface Props {
   /** 主 composer 的待发送文件（发送失败时还原） */
   pendingFiles?: FileAttachment[]
   onPendingFilesChange?: (fs: FileAttachment[]) => void
-  /** 导航到 Skills / MCP / Expert 面板 */
-  onNavigate?: (view: 'skills' | 'mcp' | 'expert') => void
+  /** 空状态 composer 里待挂载的知识库（新会话创建时带上） */
+  pendingKbIds?: string[]
+  onPendingKbIdsChange?: (ids: string[]) => void
+  /** 导航到 Skills / MCP / Expert / 知识库面板 */
+  onNavigate?: (view: 'skills' | 'mcp' | 'expert' | 'knowledge') => void
 }
 
 const SUGGESTIONS = [
@@ -143,11 +149,12 @@ export function ChatPanel({
   rightPanelOpen, permMode, providers, contextUsage,
   onPromptChange, onSend, onAbort, onResolvePerm,
   onToggleRightPanel, onOpenArtifacts, onOpenChanges,
-  onPermModeChange, onProviderChange, onExpertChange, onToast,
+  onPermModeChange, onProviderChange, onExpertChange, onKbChange, onToast,
   onStartNewSession, onNavigate,
   mode, onModeChange,
   pendingImages = [], onPendingImagesChange,
   pendingFiles = [], onPendingFilesChange,
+  pendingKbIds = [], onPendingKbIdsChange,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
@@ -419,6 +426,11 @@ export function ChatPanel({
                       current={null}
                       onChange={(id) => onExpertChange?.(id)}
                     />
+                    <KnowledgeSelector
+                      current={pendingKbIds}
+                      onChange={onPendingKbIdsChange || (() => {})}
+                      onManage={() => onNavigate?.('knowledge')}
+                    />
                   </div>
                   <div className="cb-right">
                     {startingNew ? (
@@ -605,6 +617,11 @@ export function ChatPanel({
               <ExpertSelector
                 current={session?.expert_id}
                 onChange={(id) => onExpertChange?.(id)}
+              />
+              <KnowledgeSelector
+                current={session?.kb_ids}
+                onChange={(ids) => onKbChange?.(ids)}
+                onManage={() => onNavigate?.('knowledge')}
               />
             </div>
             <div className="cb-right">

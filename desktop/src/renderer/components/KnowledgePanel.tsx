@@ -43,6 +43,9 @@ export function KnowledgePanel({ onToast }: Props) {
     doc_name: string; heading_path: string; text: string; score: number
   }> | null>(null)
   const [searching, setSearching] = useState(false)
+  const [nameModal, setNameModal] = useState<
+    { mode: 'create'; value: string } | { mode: 'rename'; kb: KbRow; value: string } | null
+  >(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const pollRef = useRef<number | null>(null)
 
@@ -56,7 +59,7 @@ export function KnowledgePanel({ onToast }: Props) {
         return res.kbs[0]?.id ?? 'default'
       })
     } catch (e) {
-      onToast(`加载资料库失败：${errText(e)}`, 'err')
+      onToast(`加载知识库失败：${errText(e)}`, 'err')
     } finally {
       setLoading(false)
     }
@@ -129,27 +132,46 @@ export function KnowledgePanel({ onToast }: Props) {
     }
   }
 
-  const handleCreateKb = async () => {
-    const name = window.prompt('新资料库名称', '')
-    if (!name || !name.trim()) return
+  const handleCreateKb = () => {
+    // window.prompt 在 Electron 渲染进程不受支持,必须用自定义弹窗
+    setNameModal({ mode: 'create', value: '' })
+  }
+
+  const handleRenameKb = (kb: KbRow) => {
+    setNameModal({ mode: 'rename', kb, value: kb.name })
+  }
+
+  const submitNameModal = async () => {
+    if (!nameModal) return
+    const name = nameModal.value.trim()
+    if (!name) return
+    const isCreate = nameModal.mode === 'create'
+    const preferId = isCreate ? undefined : (nameModal as { kb: KbRow }).kb.id
+    setNameModal(null)
     try {
-      const kb = await api.createKnowledgeBase(name.trim(), '')
-      onToast(`已创建：${kb.name}`, 'ok')
-      await reloadKbs(kb.id)
+      if (isCreate) {
+        const kb = await api.createKnowledgeBase(name, '')
+        onToast(`已创建：${kb.name}`, 'ok')
+        await reloadKbs(kb.id)
+      } else {
+        await api.updateKnowledgeBase(preferId!, { name })
+        onToast(`已重命名：${name}`, 'ok')
+        await reloadKbs(preferId)
+      }
     } catch (e) {
-      onToast(`创建失败：${errText(e)}`, 'err')
+      onToast(`${isCreate ? '创建' : '重命名'}失败：${errText(e)}`, 'err')
     }
   }
 
   const handleDeleteKb = async (kb: KbRow) => {
     if (kb.id === 'default') {
-      onToast('内置默认资料库不可删除', 'err')
+      onToast('内置默认知识库不可删除', 'err')
       return
     }
-    if (!window.confirm(`删除资料库「${kb.name}」及其全部 ${kb.document_count} 个文档？`)) return
+    if (!window.confirm(`删除知识库「${kb.name}」及其全部 ${kb.document_count} 个文档？`)) return
     try {
       await api.deleteKnowledgeBase(kb.id)
-      onToast(`已删除资料库：${kb.name}`, 'info')
+      onToast(`已删除知识库：${kb.name}`, 'info')
       await reloadKbs('default')
     } catch (e) {
       onToast(`删除失败：${errText(e)}`, 'err')
@@ -174,37 +196,18 @@ export function KnowledgePanel({ onToast }: Props) {
   const activeKb = kbs.find((k) => k.id === activeKbId)
 
   return (
-    <div className="plugin-panel">
+    <div className="plugin-panel kb-panel">
       <div className="plugin-topbar">
         <div className="plugin-title">
           <div className="plugin-title-icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}>
             <Icon name="book" size={16} />
           </div>
           <div>
-            <h2>资料库</h2>
-            <p>上传本地文档，绑定专家后即可基于文档问答、出题、拷打</p>
+            <h2>知识库</h2>
+            <p>上传文档建立索引，在对话中挂载知识库即可检索引用；支持创建多个知识库分类管理</p>
           </div>
         </div>
-
         <div className="kb-topbar-actions">
-          <select
-            className="field-input kb-kbselect"
-            value={activeKbId}
-            onChange={(e) => setActiveKbId(e.target.value)}
-            title="切换资料库"
-          >
-            {kbs.map((k) => (
-              <option key={k.id} value={k.id}>{k.name}（{k.document_count}）</option>
-            ))}
-          </select>
-          <button className="ibtn" title="新建资料库" onClick={() => void handleCreateKb()}>
-            <Icon name="plus" size={14} />
-          </button>
-          {activeKb && activeKb.id !== 'default' && (
-            <button className="ibtn" title="删除当前资料库" onClick={() => void handleDeleteKb(activeKb)}>
-              <Icon name="trash" size={14} />
-            </button>
-          )}
           <button className="primary" disabled={uploading} onClick={() => fileRef.current?.click()}>
             <Icon name={uploading ? 'clock' : 'plus'} size={14} />
             {uploading ? '上传中…' : '上传文档'}
@@ -220,12 +223,72 @@ export function KnowledgePanel({ onToast }: Props) {
         </div>
       </div>
 
-      <div className="plugin-body scroll">
+      <div className="plugin-body kbp-layout">
+        {/* 左侧：知识库卡片列表 */}
+        <aside className="kbp-side">
+          <div className="kbp-side-head">
+            <span className="kbp-side-title">知识库</span>
+            <button className="primary kbp-create" onClick={() => void handleCreateKb()}>
+              <Icon name="plus" size={13} />
+              创建知识库
+            </button>
+            <button className="ibtn" title="刷新" onClick={() => void reloadKbs(activeKbId)}>
+              <Icon name="refresh" size={13} />
+            </button>
+          </div>
+          <div className="kbp-kblist scroll">
+            {kbs.map((k) => (
+              <button
+                key={k.id}
+                className={`kbp-kbcard ${k.id === activeKbId ? 'active' : ''}`}
+                onClick={() => setActiveKbId(k.id)}
+                title={k.description || k.name}
+              >
+                <span className="kbp-kbcard-icon">
+                  <Icon name="book" size={14} />
+                </span>
+                <span className="kbp-kbcard-info">
+                  <span className="kbp-kbcard-name">{k.name}</span>
+                  <span className="kbp-kbcard-sub">{k.document_count} 个文档</span>
+                </span>
+                {k.id !== 'default' && (
+                  <span className="kbp-kbcard-actions" onClick={(e) => e.stopPropagation()}>
+                    <button className="ibtn" title="重命名" onClick={() => void handleRenameKb(k)}>
+                      <Icon name="pencil" size={12} />
+                    </button>
+                    <button className="ibtn" title="删除" onClick={() => void handleDeleteKb(k)}>
+                      <Icon name="trash" size={12} />
+                    </button>
+                  </span>
+                )}
+              </button>
+            ))}
+            {!loading && kbs.length === 0 && (
+              <div className="kbp-kbempty">还没有知识库</div>
+            )}
+            {loading && <div className="kbp-kbempty">加载中…</div>}
+          </div>
+        </aside>
+
+        {/* 右侧：当前知识库的文档 */}
+        <section className="kbp-main scroll">
+          {activeKb && (
+            <div className="kbp-kbhead">
+              <div className="kbp-kbname">{activeKb.name}</div>
+              <div className="kbp-kbdesc">{activeKb.description || '暂无描述'}</div>
+              <div className="kbp-kbmeta">
+                {activeKb.document_count} / 1000 个文档
+                {activeKb.id === 'default' && <span className="plugin-badge">内置默认库</span>}
+              </div>
+            </div>
+          )}
+
+          <div className="kbp-docs">
           <div className="kb-searchbar">
             <input
               type="search"
               className="field-input"
-              placeholder="在当前资料库中检索（回车）"
+              placeholder="在当前知识库中检索（回车）"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') void handleSearch() }}
@@ -289,12 +352,68 @@ export function KnowledgePanel({ onToast }: Props) {
           {!loading && docs.length === 0 && (
             <div className="plugin-empty">
               <Icon name="book" size={28} />
-              <p>这个资料库还是空的</p>
+              <p>这个知识库还是空的</p>
               <span>支持 .md / .txt / .pdf / .docx，上传后自动分块并向量化</span>
             </div>
           )}
           {loading && <div className="plugin-empty"><p>加载中…</p></div>}
+            </div>
+        </section>
+      </div>
+
+      {nameModal && (
+        <div className="backdrop" onClick={() => setNameModal(null)}>
+          <div className="modal" style={{ width: 400 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <span className="mh-icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand-fg)' }}>
+                <Icon name={nameModal.mode === 'create' ? 'plus' : 'pencil'} size={16} />
+              </span>
+              <span className="mh-title">
+                {nameModal.mode === 'create' ? '创建知识库' : '重命名知识库'}
+              </span>
+              <button className="ibtn" onClick={() => setNameModal(null)} title="关闭">
+                <Icon name="x" size={15} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="field">
+                <label className="field-label">知识库名称</label>
+                <input
+                  className="field-input"
+                  type="text"
+                  value={nameModal.value}
+                  autoFocus
+                  maxLength={60}
+                  placeholder="例如：Agent 文档 / RAG 论文"
+                  onChange={(e) => setNameModal(
+                    nameModal.mode === 'create'
+                      ? { mode: 'create', value: e.target.value }
+                      : { mode: 'rename', kb: nameModal.kb, value: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && nameModal.value.trim()) void submitNameModal()
+                    if (e.key === 'Escape') setNameModal(null)
+                  }}
+                />
+                <div className="field-hint">
+                  {nameModal.mode === 'create'
+                    ? '创建后可上传文档，并在聊天输入框按需挂载。'
+                    : '只改显示名称，文档与索引不受影响。'}
+                </div>
+              </div>
+            </div>
+            <div className="modal-foot">
+              <button onClick={() => setNameModal(null)}>取消</button>
+              <button
+                className="primary"
+                disabled={!nameModal.value.trim()}
+                onClick={() => void submitNameModal()}
+              >
+                {nameModal.mode === 'create' ? '创建' : '保存'}
+              </button>
+            </div>
+          </div>
         </div>
+      )}
     </div>
   )
 }

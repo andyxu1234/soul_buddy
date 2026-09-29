@@ -1,0 +1,30 @@
+Metadata-Version: 2.4
+Name: soul-buddy
+Version: 0.1.0
+Summary: A usable mini WorkBuddy desktop coding agent (Electron + FastAPI + real LLM tool-calling loop)
+Requires-Python: >=3.13
+Requires-Dist: fastapi
+Requires-Dist: uvicorn
+Requires-Dist: httpx
+Requires-Dist: anthropic
+Requires-Dist: openai
+Requires-Dist: python-dotenv
+Requires-Dist: pyyaml
+Requires-Dist: sqlalchemy
+Requires-Dist: python-multipart
+Requires-Dist: pypdf
+Requires-Dist: python-docx
+Requires-Dist: pymilvus
+Requires-Dist: milvus-lite
+Requires-Dist: langsmith
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-asyncio; extra == "dev"
+Provides-Extra: docs
+Requires-Dist: mkdocs-material>=9.5; extra == "docs"
+Provides-Extra: ragas-eval
+Requires-Dist: ragas>=0.4.3; extra == "ragas-eval"
+Requires-Dist: langchain<0.4,>=0.3; extra == "ragas-eval"
+Requires-Dist: langchain-community<0.4,>=0.3; extra == "ragas-eval"
+Requires-Dist: langchain-core<0.4,>=0.3; extra == "ragas-eval"
+Requires-Dist: langchain-openai<0.4,>=0.3; extra == "ragas-eval"

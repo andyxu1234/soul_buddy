@@ -16,7 +16,7 @@ Schema(每 collection):
 不支持时捕获异常降级纯 dense(记 audit/log)。
 
 pymilvus 为可选依赖:import 失败时 client 惰性构造抛 MilvusUnavailable,
-资料库路由/工具返回可操作提示,不影响 sidecar 其余功能。
+知识库路由/工具返回可操作提示,不影响 sidecar 其余功能。
 """
 from __future__ import annotations
 

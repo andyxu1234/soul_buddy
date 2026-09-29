@@ -4,7 +4,7 @@ https://api.siliconflow.cn/v1 的 `/chat/completions` 走 OpenAI 的 tool-callin
 协议（与 DeepSeek 同一套形状），因此直接复用 OpenAIChatProvider，只换端点与
 模型名（默认 Qwen/Qwen3-8B）。这与 deepseek.py 的处理方式一致。
 
-注意：资料库/RAG 的 embedding 也走硅基流动，但那是独立的 EMBEDDING_* 配置，
+注意：知识库/RAG 的 embedding 也走硅基流动，但那是独立的 EMBEDDING_* 配置，
 与此 provider 无关。
 
 视觉能力：同一个网关既托管纯文本模型（Qwen3-8B）也托管视觉模型

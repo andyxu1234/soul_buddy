@@ -12,8 +12,10 @@ If `memory` is None, no memory segment is registered (P2 behaviour preserved).
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Callable, Optional
 
+from ..config import DURABLE_FILENAME, HISTORY_FILENAME, HISTORY_SUBDIR
 from .compact import CompactController
 from .prompt import PromptPlanner
 from .summary import make_summary_provider
@@ -62,8 +64,11 @@ class ContextLayer:
             "durable", self._render_durable, priority=95, budget_priority=95)
 
     def compact_if_needed(self, messages: list[dict], model: str,
-                          fixed_overhead: int = 0) -> None:
-        self.compact.compact_if_needed(messages, model, fixed_overhead)
+                          fixed_overhead: int = 0,
+                          provider_tokens: int | None = None,
+                          estimated_total: int | None = None) -> None:
+        self.compact.compact_if_needed(messages, model, fixed_overhead,
+                                       provider_tokens, estimated_total)
 
     def check_hard_limit(self, messages: list[dict], model: str,
                          fixed_overhead: int = 0) -> Optional[dict]:
@@ -114,17 +119,31 @@ def build_context_layer(
     role_override: str | None = None,
     persona_text: str = "",
     recall: Callable[[str], str] | None = None,
+    session_dir: Path | None = None,
+    session_id: str | None = None,
 ) -> ContextLayer:
     """Construct a ready-to-use ContextLayer with the base system segments.
 
     role_override: 传入专家的 system_prompt 时,替换默认的核心身份段。
     用于 replace_core=True 的专家(如面试官/考官),他们的角色与"写代码的 agent"
     根本不同,叠加会冲突。None = 用 SYSTEM_PROMPT.md 的默认身份。
+
+    session_dir / session_id (可选, P0-1/P0-2/P2-8): 提供后启用压缩落盘 ——
+    history 文件写到 <session>/history/<id>.txt(独立目录,不受 Externalizer 配额
+    LRU 清理),durable facts 落到 <session>/durable.txt 并跨进程恢复。两者皆
+    None 时保持纯内存行为(单元测试/无持久 session 的场景)。
     """
+    history_path = durable_path = None
+    if session_dir is not None and session_id:
+        history_path = session_dir / HISTORY_SUBDIR / HISTORY_FILENAME.format(
+            session_id=session_id)
+        durable_path = session_dir / DURABLE_FILENAME
     compact = CompactController(
         summary_provider=summary_provider,
         on_event=on_event,
         keep_recent_turns=keep_recent_turns,
+        history_path=history_path,
+        durable_path=durable_path,
     )
     planner = PromptPlanner(budget_chars=budget_chars)
     if register_base_segments:

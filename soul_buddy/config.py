@@ -136,7 +136,19 @@ COMPACT_TRIGGER_RATIO = 0.75
 COMPACT_TARGET_RATIO = 0.50
 RESERVE_FOR_OUTPUT = 4_096
 SUMMARY_INPUT_MAX_CHARS = 30_000    # dropped-history text sent to the summarizer (tail kept)
+# P1-5: 摘要调用预算(可配置)。长会话下 1024 token 可能丢失早期关键上下文,
+# 通过 SOUL_SUMMARY_MAX_TOKENS 可调;旧 summary 消息会进入新摘要输入(链式累积,
+# 对齐 Octop —— 摘要压缩自身不丢历史摘要,见 build_summary_prompt)。
+SUMMARY_MAX_TOKENS = _env_int("SOUL_SUMMARY_MAX_TOKENS", 1024)
 SUBAGENT_KEEP_RECENT_TURNS = 4      # sub-agents are ephemeral workers: smaller history floor
+
+# --- P2-8: 压缩落盘(history/durable)路径,独立于 Externalizer 的 tool-results ----
+# P0-1/P0-2 把被淘汰 turns 序列化追加到 session 级 history 文件、把 durable facts
+# 落到独立文件,便于回放/审计/纠错恢复。这些文件放在 <session>/history/ 子目录,
+# **不归 Externalizer 管理** —— 不受 QUOTA_SESSION_* / QUOTA_GLOBAL_* LRU 清理。
+HISTORY_SUBDIR = "history"                       # <session>/history/ 独立目录
+HISTORY_FILENAME = "{session_id}.txt"            # 追加式,带时间戳分段
+DURABLE_FILENAME = "durable.txt"                 # durable facts,每次覆盖为最新值
 
 
 def context_window(model: str | None) -> int:
@@ -308,7 +320,7 @@ SUBAGENT_FORBIDDEN_TOOLS = frozenset({
     # 记忆写入是主会话语义:子代理(探索型)不应替用户产生长期记忆,
     # 且 provenance 应归属主会话。
     "save_user_preference", "write_workspace_fact",
-    # 资料库检索绑定在主会话专家上,子代理 ctx 无 knowledge
+    # 知识库检索绑定在主会话上,子代理 ctx 无 knowledge
     "search_knowledge",
 })
 
@@ -322,13 +334,14 @@ BUILTIN_SUBAGENTS_DIR = _builtin_subagents_dir()
 # --- Experts(s18:预设角色包,单层 user) --------------------------------------
 EXPERTS_DIR = HOME / "experts"             # <home>/experts/<id>.json
 
-# --- Knowledge base(资料库/RAG) ----------------------------------------------
+# --- Knowledge base(知识库/RAG) ----------------------------------------------
 KB_DIR = HOME / "kb"                       # <home>/kb/{kb.db, milvus.db, uploads/<kb_id>/}
 KB_DB_PATH = KB_DIR / "kb.db"             # 元数据(stdlib sqlite3,自包含)
 MILVUS_DB_PATH = KB_DIR / "milvus.db"     # milvus-lite 本地库文件
 KB_UPLOADS_DIR = KB_DIR / "uploads"       # 上传原文:<uploads>/<kb_id>/<doc_id><ext>
 KB_UPLOAD_LIMIT_MB = 30                    # 单文件上传上限
 KB_ALLOWED_EXTS = {".md", ".markdown", ".txt", ".pdf", ".docx"}
+KB_EVALS_DIR = KB_DIR / "evals"            # RAG 离线评估:<evals>/<kb_id>.json + reports/<kb_id>/
 
 # --- File history (WorkBuddy-aligned, three-layer storage) ----------------
 # 内容层: 完整文件快照,文件名 <hash>@<vN>,hash=sha256(绝对路径)[:16]
@@ -362,14 +375,17 @@ class Settings:
     xiaomi_api_key: str = ""
     xiaomi_base_url: str = "https://api.xiaomimimo.com/v1"
     xiaomi_model: str = "mimo-v2.5"
-    # --- Knowledge base(资料库/RAG) embedding 配置(OpenAI 兼容 /embeddings) ---
-    embedding_base_url: str = ""            # 空 = 未配置,资料库检索不可用
+    # --- Knowledge base(知识库/RAG) embedding 配置(OpenAI 兼容 /embeddings) ---
+    embedding_base_url: str = ""            # 空 = 未配置,知识库检索不可用
     embedding_api_key: str = ""
     embedding_model: str = ""
     embedding_dims: int = 0                 # 0 = 首次调用时从 API 响应探测
     milvus_uri: str = ""                    # 空 = 本地 milvus-lite 文件;http(s):// = standalone
     kb_chunk_tokens: int = 700              # 分块目标 token 数
     kb_top_k: int = 5                       # 检索返回条数
+    # RAG 评估的 RAGAS judge 模型:空 = 回落 RUBRIC_JUDGE_PROVIDER,再回落会话 provider。
+    # faithfulness 之类指标对 judge 能力有要求,建议指向强模型(如 deepseek)。
+    ragas_judge_provider: str = ""
     offline_script: str = ""
 
     @staticmethod
@@ -401,6 +417,7 @@ class Settings:
             milvus_uri=get("MILVUS_URI", ""),
             kb_chunk_tokens=int(get("KB_CHUNK_TOKENS") or 700),
             kb_top_k=int(get("KB_TOP_K") or 5),
+            ragas_judge_provider=get("SOUL_RAGAS_JUDGE_PROVIDER", "").strip().lower(),
             offline_script=get("SOUL_OFFLINE_SCRIPT", ""),
         )
 

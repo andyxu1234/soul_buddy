@@ -18,6 +18,14 @@ log = logging.getLogger("soul_buddy.context.usage")
 from .tokens import estimate_tokens, estimate_messages
 
 
+# P1-6: tool schema token 缓存 —— 每轮 _safe_estimate_tools 全量 json.dumps 所有
+# 工具再估算,无缓存。这里按 (name, description, parameters) 缓存单个工具的估算
+# 结果,两次 calc 对相同工具只估算一次(对齐 Octop 的 tool_schema_tokens 缓存)。
+# 有界缓存(防 schema 无限增长);估算本身是纯函数,缓存不改变数值语义。
+_TOOL_SCHEMA_CACHE: dict[tuple, int] = {}
+_TOOL_SCHEMA_CACHE_MAX = 512
+
+
 @dataclass
 class ContextUsage:
     """单次 LLM 调用的输入上下文分类别用量.
@@ -173,12 +181,25 @@ class ContextUsageCalculator:
     @staticmethod
     def _safe_estimate_tools(tools_specs) -> int:
         try:
-            raw = json.dumps(
-                [{"name": t.name, "desc": t.description, "params": t.parameters}
-                 for t in tools_specs],
-                ensure_ascii=False,
-            )
-            return estimate_tokens(raw)
+            # P1-6: 按 (name, desc, parameters) 缓存单个工具 schema 的 token。
+            # 全量 json.dumps 只在 cache miss 时做一次,同轮/跨轮重复估算直接命中。
+            total = 0
+            for t in tools_specs:
+                key = (t.name, t.description,
+                       json.dumps(t.parameters, sort_keys=True, ensure_ascii=False))
+                cached = _TOOL_SCHEMA_CACHE.get(key)
+                if cached is None:
+                    raw = json.dumps(
+                        {"name": t.name, "desc": t.description, "params": t.parameters},
+                        ensure_ascii=False,
+                    )
+                    cached = estimate_tokens(raw)
+                    if len(_TOOL_SCHEMA_CACHE) < _TOOL_SCHEMA_CACHE_MAX:
+                        _TOOL_SCHEMA_CACHE[key] = cached
+                total += cached
+            # 数组级开销(方括号/逗号)与单条合计近似;与旧全量 json.dumps 相比误差
+            # 极小,且只影响展示/触发的估计口径,不改变"宁可高估"取向。
+            return total + max(0, len(tools_specs))
         except Exception:
             log.warning("estimate_tools failed")
             try:

@@ -337,3 +337,42 @@ def sanitize_tool_messages(messages: list[dict]) -> None:
                 messages[i + 1:i + 1] = placeholders
                 i += len(placeholders)
         i += 1
+
+
+# Overflow markers used by P0-4 runtime fallback. 覆盖主流 provider 的报错措辞:
+#   OpenAI / DeepSeek / SiliconFlow / xiaomi(OpenAI 兼容): "maximum context
+#     length", 错误码 context_length_exceeded, 413
+#   Anthropic: "prompt is too long" / "input too long" / "too many tokens"
+# 判定只是"是否该触发 force_reduce + 重试一次"的启发式 —— 误判最多多一次
+# 压缩后的重试,不产生错误结果。
+_OVERFLOW_MARKERS = (
+    "context_length_exceeded",
+    "maximum context length",
+    "context length exceeded",
+    "prompt is too long",
+    "input too long",
+    "too many tokens",
+    "request too large",
+    "exceeded the maximum token",
+    "you sent too many tokens",
+    "context window",
+    "exceeded the window",
+    "413",
+)
+
+
+def is_context_overflow_error(exc: Exception) -> bool:
+    """Heuristic: did a provider raise a context-window overflow?
+
+    Checks the error code/status and message text for known overflow markers.
+    False positives only trigger one force_reduce + retry, which is safe.
+    """
+    code = getattr(exc, "code", None)
+    if isinstance(code, str) and ("context" in code.lower()
+                                  or "token" in code.lower()):
+        return True
+    try:
+        msg = str(exc).lower()
+    except Exception:
+        msg = ""
+    return any(m in msg for m in _OVERFLOW_MARKERS)
