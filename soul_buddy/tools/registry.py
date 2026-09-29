@@ -13,7 +13,7 @@ from typing import Callable
 from ..context.externalize import Externalizer
 from ..models import ToolResult
 from ..permissions.scope import WorkspaceScope
-from ..skills.tool import SKILL_TOOL_SPEC, run_use_skill
+from ..skills.tool import SKILL_TOOL_SPEC, run_load_skill
 from ..subagents.tool import TASK_TOOL_SPEC, run_task
 from . import bash, fs, knowledge, memory, present, rollback
 
@@ -50,7 +50,7 @@ _TOOL_HANDLERS = {
     "glob": fs.run_glob,
     "grep": fs.run_grep,
     "present_files": present.run_present_files,
-    "use_skill": run_use_skill,
+    "load_skill": run_load_skill,
     "list_changes": rollback.run_list_changes,
     "rollback_file": rollback.run_rollback_file,
     "rollback_session": rollback.run_rollback_session,

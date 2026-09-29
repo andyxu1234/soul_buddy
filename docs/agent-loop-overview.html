@@ -311,7 +311,7 @@ flowchart TB
   T2 -->|命中| AL2["ALLOW read_default"]
   T2 -->|否| T3["T3 write_file / edit_file 改前自动快照"]
   T3 -->|命中| AL3["ALLOW write_default"]
-  T3 -->|否| T4["T4 present_files / rollback / task / use_skill / memory"]
+  T3 -->|否| T4["T4 present_files / rollback / task / load_skill / memory"]
   T4 -->|命中| AL4["ALLOW 委托类 声明式"]
   T4 -->|否| T5["T5 mcp__* 外部连接器"]
   T5 -->|命中| A3["ASK mcp_remote_call<br>allow_remember=False"]
@@ -330,7 +330,7 @@ flowchart TB
 <tr><td>tool-2</td><td>read_file / glob / grep</td><td class="tag-s">ALLOW</td><td>是</td></tr>
 <tr><td>tool-3</td><td>write_file / edit_file（改前自动快照）</td><td class="tag-s">ALLOW</td><td>是</td></tr>
 <tr><td>tool-4</td><td>present_files / list_changes / rollback_file / rollback_session</td><td class="tag-s">ALLOW</td><td>是</td></tr>
-<tr><td>tool-5</td><td>task / use_skill / save_user_preference / write_workspace_fact</td><td class="tag-s">ALLOW</td><td>是</td></tr>
+<tr><td>tool-5</td><td>task / load_skill / save_user_preference / write_workspace_fact</td><td class="tag-s">ALLOW</td><td>是</td></tr>
 <tr><td>tool-6</td><td>mcp__* 外部连接器</td><td class="tag-w">ASK</td><td>否</td></tr>
 <tr><td>tool-7</td><td>默认兜底</td><td class="tag-d">DENY</td><td>否</td></tr>
 </table>
@@ -491,7 +491,7 @@ flowchart LR
 <tr><td>file-history-snapshot</td><td>是</td><td>否</td><td>写工具前后各一条</td></tr>
 <tr><td>permission_request / resolved / expired</td><td>是</td><td>否</td><td>ASK 生命周期</td></tr>
 <tr><td>turn_budget_warning</td><td>是</td><td>否</td><td>第 32 轮</td></tr>
-<tr><td>skill_loaded</td><td>是</td><td>否</td><td>自动匹配加载或 use_skill</td></tr>
+<tr><td>skill_loaded</td><td>是</td><td>否</td><td>自动匹配加载或 load_skill</td></tr>
 <tr><td>run_started / run_finished / run_aborted</td><td>是</td><td>否</td><td>run 边界</td></tr>
 <tr><td>artifact_presented</td><td>是</td><td>否</td><td>present_files 成功且有卡片</td></tr>
 <tr><td>context_usage</td><td>是</td><td>否</td><td>每轮估算 + 官方用量校准各一次</td></tr>

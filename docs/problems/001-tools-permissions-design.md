@@ -36,7 +36,7 @@ SoulBuddy 给模型暴露了 7 个工具：
 | `edit_file` | 改文件 | **自动 ALLOW**（同上） |
 | `glob` | 列文件 | 自动 ALLOW |
 | `grep` | 搜内容 | 自动 ALLOW |
-| `use_skill` | 调用 skill | ASK |
+| `load_skill` | 调用 skill | ASK |
 | hard_deny (rm -rf/sudo/mkfs/format) | 危险命令 | **直接 DENY，从不询问** |
 | path_escape (路径逃逸 workspace) | 越界 | **直接 DENY** |
 
@@ -219,7 +219,7 @@ return PermissionDecision(PermissionAction.ASK, "bash_default",
 ├── bash 非 benign                 → 含 pipe / redirect / subshell / 未知命令
 ├── bash 含副作用子命令             → git push / git commit / pip install / npm install / ...
 ├── mcp__*                          → 远程 MCP 工具（双重授权：gate + handler allowlist）
-├── use_skill                       → 加载 skill
+├── load_skill                       → 加载 skill
 └── allow_rest 已激活时 → 后续 ASK 自动 ALLOW（run 级快捷方式）
 
 🚫 直接拒绝（从不弹窗）

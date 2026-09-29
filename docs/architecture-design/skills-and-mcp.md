@@ -36,7 +36,7 @@ flowchart TD
     S2 --> S3["生成紧凑索引<br/>（每条技能几十 token）<br/>注入系统提示词"]
     S3 --> M1{"用户消息进来"}
     M1 -- "read_when 触发词命中" --> A1["自动加载全文<br/>emit SKILL_LOADED(auto)"]
-    M1 -- "模型主动调用 use_skill(title)" --> A2["懒加载全文<br/>emit SKILL_LOADED"]
+    M1 -- "模型主动调用 load_skill(title)" --> A2["懒加载全文<br/>emit SKILL_LOADED"]
     M1 -- "无关" --> M2["保持只有索引"]
     A1 --> L1["loaded_block 每轮注入系统提示词"]
     A2 --> L1

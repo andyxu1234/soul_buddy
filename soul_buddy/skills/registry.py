@@ -67,7 +67,7 @@ class SkillRegistry:
         """Compact index for the system prompt (empty when no skills)."""
         if not self.index:
             return ""
-        lines = ["## 可用技能（需要时调用 use_skill 加载全文）"]
+        lines = ["## 可用技能（需要时调用 load_skill 加载全文）"]
         lines += [s.index_line() for s in self.index.values()]
         return "\n".join(lines)
 

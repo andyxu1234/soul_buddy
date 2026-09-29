@@ -69,7 +69,7 @@ if decision.action == PermissionAction.ASK:
 | 5 | `write_file` / `edit_file` | **ALLOW** | 区外已 DENY，区内有备份 |
 | 4b | `present_files` | **ALLOW** | 声明式展示，无副作用 |
 | 4c | `list_changes` / `rollback_file` / `rollback_session` | **ALLOW** | 回滚到自动快照，低风险 |
-| 4d | `task` / `use_skill` | **ALLOW** | 委托与加载，子代理自守其门 |
+| 4d | `task` / `load_skill` | **ALLOW** | 委托与加载，子代理自守其门 |
 | 4e | `save_user_preference` / `write_workspace_fact` | **ALLOW** | 只写 `~/.soul_buddy` 本地库，落审计 |
 | 5′ | `mcp__<connector>__<tool>` | **ASK** | 远程调用 |
 | 6 | 其他 bash | **ASK** | `bash_default` |
@@ -83,7 +83,7 @@ WRITE_TOOLS   = {"write_file", "edit_file"}
 PRESENT_TOOLS = {"present_files"}
 ROLLBACK_TOOLS= {"list_changes", "rollback_file", "rollback_session"}
 TASK_TOOLS    = {"task"}
-SKILL_TOOLS   = {"use_skill"}
+SKILL_TOOLS   = {"load_skill"}
 MEMORY_TOOLS  = {"save_user_preference", "write_workspace_fact"}
 ```
 

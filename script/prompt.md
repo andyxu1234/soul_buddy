@@ -19,7 +19,7 @@
 - user.name: 中文名：徐振宇；可称呼为 Andy。
 - user.profile: 用户是一名程序员；工作时区为中国（UTC+8）；年龄 31 岁。
 
-## 可用技能（需要时调用 use_skill 加载全文）
+## 可用技能（需要时调用 load_skill 加载全文）
 - **frontend-design**: 
 - **pptx**: 
 - **superpowers-plan**: 

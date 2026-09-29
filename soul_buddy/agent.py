@@ -197,7 +197,7 @@ class SoulAgent:
                 tools_specs = [s for s in tools_specs
                                if s.name != "search_knowledge"]
             # system prompt 每轮重组:压缩流程在轮间提取的 durable 事实块、
-            # 中途 use_skill 加载的技能内容,都要能进入后续轮次的请求 (P1-7)。
+            # 中途 load_skill 加载的技能内容,都要能进入后续轮次的请求 (P1-7)。
             # 长期记忆 v3(轨 C): 每轮以当前用户输入为 query 注入召回段。
             if self.context is not None and getattr(self.context, "wiring", None) is not None:
                 try:
@@ -765,7 +765,7 @@ class SoulAgent:
             self.tools.dispatch, call, self._tool_ctx(session))
         if self.memory is not None:
             self.memory.record_tool_stat(session.id, call.name)
-        if self.skills is not None and call.name == "use_skill":
+        if self.skills is not None and call.name == "load_skill":
             # surface freshly loaded skill content as a dedicated event
             await self._aemit(session, EventType.SKILL_LOADED, {
                 "title": call.arguments.get("title", ""),

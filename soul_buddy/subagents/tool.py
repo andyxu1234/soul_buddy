@@ -1,6 +1,6 @@
 """The `task` tool — 主 Agent 通过它委托 sub-agent 在隔离上下文执行。
 
-和 `use_skill` 同级:白名单 ALLOW(委托本身不修改文件,副作用在 sub-agent 内部
+和 `load_skill` 同级:白名单 ALLOW(委托本身不修改文件,副作用在 sub-agent 内部
 工具调用时才发生,那时已走 sub-agent 自己的权限层)。
 """
 from __future__ import annotations

@@ -108,7 +108,7 @@ max_time_s: 300
 
 ### 3.4 tool.py — Task 工具
 
-`TASK_TOOL_SPEC` 注册进 `ToolRegistry`,和 `use_skill` 同级:
+`TASK_TOOL_SPEC` 注册进 `ToolRegistry`,和 `load_skill` 同级:
 
 ```json
 {
@@ -158,9 +158,9 @@ BUILTIN_SUBAGENTS_DIR = Path(__file__).parent / "subagents" / "builtin"
 
 ```python
 TASK_TOOLS = {"task"}
-SKILL_TOOLS = {"use_skill"}
+SKILL_TOOLS = {"load_skill"}
 
-# 4d. task / use_skill — delegation, no file side effects at boundary
+# 4d. task / load_skill — delegation, no file side effects at boundary
 if req.tool in TASK_TOOLS or req.tool in SKILL_TOOLS:
     return ALLOW  # delegation_default
 ```

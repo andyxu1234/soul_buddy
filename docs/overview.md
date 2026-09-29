@@ -99,7 +99,7 @@ spawn → READY → /bootstrap 拿 cookie → /api/v1/sessions 鉴权通过 → 
 ## P5 打磨 + 打包（2026-09-08 完成）
 
 ### 新增模块
-- `skills/`：`Skill`/`SkillPermissions` 模型 + YAML frontmatter 解析（D1 权限校验）；`SkillRegistry` 懒加载（仅 frontmatter 常驻，命中 trigger 才读全文）；`use_skill` 工具接入 `ToolRegistry`；**D1 门**：技能清单只能收窄 harness 权限，绝不能扩权。
+- `skills/`：`Skill`/`SkillPermissions` 模型 + YAML frontmatter 解析（D1 权限校验）；`SkillRegistry` 懒加载（仅 frontmatter 常驻，命中 trigger 才读全文）；`load_skill` 工具接入 `ToolRegistry`；**D1 门**：技能清单只能收窄 harness 权限，绝不能扩权。
 - `mcp/`：`MCPPermissionGrant`（工具名必须 `mcp__` 命名空间 + `network` 门，无通配）；`MCPConnector`（trust→connect→discover→call，命名空间 `mcp__<conn>__<tool>`）；`ConnectorManager` 读 `~/.soul_buddy/mcp.json`；`bridge.py` 把 MCP 工具注册进 `ToolRegistry` 且经同一 permissions 门。
 - `artifacts.py`：`ArtifactCard`（图标/分类/大小/primary）+ `artifacts_from_session`（从 transcript 派生，不另存）；`GET /api/v1/sessions/{id}/artifacts`；前端 `ArtifactCard.tsx` 在聊天中渲染产物。
 

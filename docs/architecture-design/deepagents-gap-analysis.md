@@ -124,12 +124,12 @@ soul_buddy 是**单后端写死**：`tools/fs.py` 里 `sp.write_text(...)` 直�
 |---|---|---|
 | 规范 | Agent Skills spec（`name` + `description` 必填） | 自研 frontmatter（`read_when` 触发词组） |
 | 分级 | 元数据 → 正文 → `scripts/`/`references/`/`assets/` | 索引 → 正文（**无资源目录约定**） |
-| 触发 | LLM 读 description 自行判断 | ① 关键词子串匹配自动加载（`registry.py:79`）② 模型显式 `use_skill` |
+| 触发 | LLM 读 description 自行判断 | ① 关键词子串匹配自动加载（`registry.py:79`）② 模型显式 `load_skill` |
 | 叠加 | 同名后者覆盖 | 同名 **project > user** |
 | 权限 | 可给技能绑独立 `permissions` | `SkillPermissions` **只能收窄** harness 策略（D1，`authorize_skill_tool`） |
 
 **评价**：soul_buddy 的"只能收窄"是**比 deepagents 更硬的安全设计**（deepagents 允许给技能配 permissions，本质是替换）。
-但 soul_buddy 的 `read_when` 子串匹配很脆（`registry.py:83` 纯 `in` 判断），而 deepagents 靠 LLM 读 description 判断更鲁棒——soul_buddy 两条路都有（也有 `use_skill`），实际是"自动触发弱 + 显式加载强"。
+但 soul_buddy 的 `read_when` 子串匹配很脆（`registry.py:83` 纯 `in` 判断），而 deepagents 靠 LLM 读 description 判断更鲁棒——soul_buddy 两条路都有（也有 `load_skill`），实际是"自动触发弱 + 显式加载强"。
 
 → 建议：① SKILL.md 增加标准 `name`/`description` 字段（同时保留 `read_when` 兼容）；② 引入 `scripts/`/`references/`/`assets/` 目录约定——**这一条对 soul_buddy 特别值**，因为 Agent Skills 生态已有大量现成技能包（Anthropic、WorkBuddy 的 skill 市场），对齐规范 = 免费获得生态。
 

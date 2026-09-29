@@ -382,7 +382,7 @@ def _make_handler(manager: ConnectorManager, tool_name: str):
 
 ### 7.3 注入位置（system prompt 拼装顺序）
 
-`_system_prompt()` 每轮重组（压缩、中途 `use_skill` 加载都需在后续轮次可见），
+`_system_prompt()` 每轮重组（压缩、中途 `load_skill` 加载都需在后续轮次可见），
 MCP 块位于**最后、Workspace root 之前**：
 
 ```696:705:soul_buddy/agent.py

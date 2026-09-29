@@ -153,7 +153,7 @@ flowchart LR
             T2["read/write/edit_file<br/>glob/grep"]
             T3["present_files"]
             T4["list_changes<br/>rollback_file/session"]
-            T5["use_skill"]
+            T5["load_skill"]
             T6["save_user_preference<br/>write_workspace_fact"]
             T7["task"]
             T8["mcp__conn__tool<br/>（动态绑定）"]
@@ -385,7 +385,7 @@ flowchart TD
     G14 -- "handler 抛异常" --> G17["异常转 ToolResult(is_error)（BR-19）"]
     G14 -- "成功" --> G18["ToolResult（大结果自动外置 50KiB）"]
     G18 --> G19{"特殊后处理"}
-    G19 -- "use_skill" --> G20["emit SKILL_LOADED（已加载列表）"]
+    G19 -- "load_skill" --> G20["emit SKILL_LOADED（已加载列表）"]
     G19 -- "任意工具" --> G21["memory.record_tool_stat（工具使用统计）"]
     G20 --> OUT(["结果返回主循环"])
     G21 --> OUT
@@ -422,7 +422,7 @@ flowchart TD
     T2 -- "write_file/edit_file" --> X8["ALLOW write_default<br/>（工作区内写默认放行；<br/>fs.py 自动备份兜底）"]
     T2 -- present_files --> X9["ALLOW（声明式交付，无副作用）"]
     T2 -- "rollback×3" --> X10["ALLOW（恢复到自动快照）"]
-    T2 -- "task / use_skill" --> X11["ALLOW（委托边界无副作用；<br/>子代理内部有更严的门）"]
+    T2 -- "task / load_skill" --> X11["ALLOW（委托边界无副作用；<br/>子代理内部有更严的门）"]
     T2 -- "memory×2" --> X12["ALLOW（只写 ~/.soul_buddy 本地库，审计留痕）"]
     T2 -- "mcp__*" --> X13["ASK mcp_remote_call<br/>（connector grant 在 handler 内二次校验）"]
     T2 -- 其他 --> X14["DENY default_deny（白名单外一律拒绝）"]
@@ -735,7 +735,7 @@ flowchart LR
 | 每工具 | `function_call_result` | 每个 call | ✅ |
 | 每工具 | `file-history-snapshot`(改后) | 写成功 | ✅ |
 | 每工具 | `artifact_presented` | present_files 成功 | ✅ |
-| 每工具 | `skill_loaded` | use_skill 成功 | ✅ |
+| 每工具 | `skill_loaded` | load_skill 成功 | ✅ |
 | 结束 | `run_finished` / `run_aborted` | 见 11.3 | ✅ |
 
 ---

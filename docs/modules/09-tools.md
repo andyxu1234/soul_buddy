@@ -35,7 +35,7 @@
 ### 技能与子代理（skills / subagents）
 | Tool | 用途 |
 |---|---|
-| `use_skill` | 按需懒加载某个 skill 的完整指令（仅当技能系统启用时可用）。 |
+| `load_skill` | 按需懒加载某个 skill 的完整指令（仅当技能系统启用时可用）。 |
 | `task` | 把自包含子任务委托给隔离的 sub-agent 执行，返回结构化 JSON 摘要（sub-agent 看不到主对话历史）。 |
 
 ### MCP 工具（动态加载，见下节说明）

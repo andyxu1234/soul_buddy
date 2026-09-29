@@ -696,7 +696,7 @@ System 消息（若 API 支持）用于放置**长期稳定**的规则：身份�
 
 **Q11 · SoulBuddy 实现：** SoulBuddy 的 System Prompt 是**分层懒惰注入**的典范：
 - **核心**：`SYSTEM_PROMPT.md` 只保留角色、工具清单、工作方式、回滚规则、交付规则、子代理规则（短而硬）；
-- **细节按需**：技能（skills）**只把 title + summary 放进索引块**（几十 token/个），正文等 `use_skill` 或 `read_when` 命中才加载；sub-agent 同理只放索引；
+- **细节按需**：技能（skills）**只把 title + summary 放进索引块**（几十 token/个），正文等 `load_skill` 或 `read_when` 命中才加载；sub-agent 同理只放索引；
 - **动态块**：MCP 连接器块只在有连接时注入；expert 块只在绑定专家时注入；durable 事实块空时**完全不出现**（不留占位垃圾）。
 这就是「核心规则短而硬，细节放按需加载」的落地。
 

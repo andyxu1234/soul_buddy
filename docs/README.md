@@ -40,7 +40,7 @@ _输入框的「+」菜单支持引用项目文件、添加附件与图片、切
 
 ![Skills 技能系统](assets/skills.png)
 
-_Skills：领域知识懒加载。启动只读 frontmatter 拼成紧凑索引，正文按需 `use_skill` 加载，可安装 / 启用 / 卸载。_
+_Skills：领域知识懒加载。启动只读 frontmatter 拼成紧凑索引，正文按需 `load_skill` 加载，可安装 / 启用 / 卸载。_
 
 ![专家系统](assets/experts.png)
 

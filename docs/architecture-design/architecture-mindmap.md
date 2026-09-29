@@ -51,7 +51,7 @@ flowchart LR
     end
 
     subgraph G6["⑥ 扩展系统"]
-        F1["Skills：SKILL.md + frontmatter<br/>read_when 自动加载 / use_skill 懒加载"]
+        F1["Skills：SKILL.md + frontmatter<br/>read_when 自动加载 / load_skill 懒加载"]
         F2["MCP：mcp.json 连接器<br/>mcp__conn__tool 动态注册"]
         F3["Sub-agents：agent.yaml 三层注册<br/>builtin / user / project"]
     end

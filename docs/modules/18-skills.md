@@ -21,7 +21,7 @@ Skill 就是**一个装着 `SKILL.md` 的目录**。`SKILL.md` = YAML frontmatte
 | 做法 | 代价 |
 |---|---|
 | 全量内联所有 skill 正文 | system prompt 爆炸，每轮都付费，且大部分与当前任务无关 |
-| 只放索引 + 按需加载 | 多一次 `use_skill` 工具调用往返（可接受） |
+| 只放索引 + 按需加载 | 多一次 `load_skill` 工具调用往返（可接受） |
 
 第二条就是当前实现。
 
@@ -33,17 +33,17 @@ Skill 就是**一个装着 `SKILL.md` 的目录**。`SKILL.md` = YAML frontmatte
 
 | 文件 | 规模 | 职责 |
 |---|---|---|
-| `skills/__init__.py` | ~25 | 包门面，导出 `Skill` / `SkillRegistry` / `SKILL_TOOL_SPEC` / `run_use_skill` 等 |
+| `skills/__init__.py` | ~25 | 包门面，导出 `Skill` / `SkillRegistry` / `SKILL_TOOL_SPEC` / `run_load_skill` 等 |
 | `skills/model.py` | ~177 | **数据模型 + frontmatter 解析 + 声明式权限清单校验** |
 | `skills/registry.py` | ~154 | **发现 / 索引 / 懒加载 / trigger 匹配 / D1 权限判定** |
-| `skills/tool.py` | ~33 | `use_skill` 工具的 schema 与 handler |
+| `skills/tool.py` | ~33 | `load_skill` 工具的 schema 与 handler |
 
 外围涉及：
 
 | 文件 | 关键内容 | 职责 |
 |---|---|---|
 | `agent.py` | `run()` 中的自动加载（`:125-132`）、`_system_prompt()` 注入（`:671-680`）、`_skill_authorize()`（`:501-515`）、`SKILL_LOADED` 事件 | 注入点 + 权限收窄 + 事件 |
-| `tools/registry.py` | `SKILL_TOOL_SPEC` 注册（`:213`）、`_TOOL_HANDLERS["use_skill"]`（`:52`） | 工具装配 |
+| `tools/registry.py` | `SKILL_TOOL_SPEC` 注册（`:213`）、`_TOOL_HANDLERS["load_skill"]`（`:52`） | 工具装配 |
 | `config.py` | `SKILLS_DIR`（`:96`） | user 级目录常量 |
 | `api/runtime.py` | `SkillRegistry(workspace_root=..., user_dir=SKILLS_DIR)`（`:330-332`） | 生产 wiring |
 | `api/routers/skills.py` | `GET /api/v1/skills`（`:31-56`）、`_serialize()`（`:21-28`） | 前端列表接口 |
@@ -80,7 +80,7 @@ permissions:
 
 | 字段 | 类型 | 必填 | 缺省 | 说明 |
 |---|---|---|---|---|
-| `title` | str | 否 | 父目录名（`path.parent.name`） | **技能的全局唯一键**，`use_skill` 按它查找 |
+| `title` | str | 否 | 父目录名（`path.parent.name`） | **技能的全局唯一键**，`load_skill` 按它查找 |
 | `summary` | str | 否 | `""` | 索引块里的一行摘要，模型据此判断要不要加载 |
 | `read_when` | str \| list[str] | 否 | `[]` | 自动加载触发词；字符串会被归一成单元素列表（`model.py:164-166`） |
 | `permissions.tools` | list[str] | 否 | `()` | 允许调用的工具白名单 |
@@ -161,7 +161,7 @@ role / memory / durable …（planner 段）
         """Compact index for the system prompt (empty when no skills)."""
         if not self.index:
             return ""
-        lines = ["## 可用技能（需要时调用 use_skill 加载全文）"]
+        lines = ["## 可用技能（需要时调用 load_skill 加载全文）"]
         lines += [s.index_line() for s in self.index.values()]
         return "\n".join(lines)
 ```
@@ -176,7 +176,7 @@ def index_line(self) -> str:
 渲染出来长这样：
 
 ```markdown
-## 可用技能（需要时调用 use_skill 加载全文）
+## 可用技能（需要时调用 load_skill 加载全文）
 - **git-commit**: 规范地提交代码
 - **pytest-debug**: 定位 pytest 失败用例
 ```
@@ -198,7 +198,7 @@ def full_block(self) -> str:
 
 `_system_prompt()` 在**每一轮 turn** 都被重新调用（`agent.py:150`），所以：
 
-> 用户在**第 5 轮**通过 `use_skill` 加载的技能，其正文会自动出现在**第 6 轮及之后**的请求里，无需任何额外处理。
+> 用户在**第 5 轮**通过 `load_skill` 加载的技能，其正文会自动出现在**第 6 轮及之后**的请求里，无需任何额外处理。
 
 这是「加载即入上下文」的实现方式——skill 正文不进 `messages`，而是每次拼 system prompt 时从 registry 现取。好处是**不污染消息历史、不参与压缩裁剪**；代价是每轮多一次字符串拼接（可忽略）。
 
@@ -206,11 +206,11 @@ def full_block(self) -> str:
 
 ## 5. 如何使用 Skills
 
-### 5.1 `use_skill` 工具
+### 5.1 `load_skill` 工具
 
 ```11:32:soul_buddy/skills/tool.py
 SKILL_TOOL_SPEC = {
-    "name": "use_skill",
+    "name": "load_skill",
     "description": ("Load a skill's full instructions by title. Use when a task "
                     "matches a skill in the available-skills index. Returns the "
                     "skill body."),
@@ -225,7 +225,7 @@ SKILL_TOOL_SPEC = {
 }
 
 
-def run_use_skill(args: dict, ctx) -> ToolResult:
+def run_load_skill(args: dict, ctx) -> ToolResult:
     registry = getattr(ctx, "skill_registry", None)
     if registry is None:
         return ToolResult(content="技能系统未启用。", is_error=False)
@@ -272,7 +272,7 @@ def run_use_skill(args: dict, ctx) -> ToolResult:
 ### 5.3 加载成功后的 SSE 事件
 
 ```493:498:soul_buddy/soul_buddy/agent.py
-        if self.skills is not None and call.name == "use_skill":
+        if self.skills is not None and call.name == "load_skill":
             # surface freshly loaded skill content as a dedicated event
             await self._aemit(session, EventType.SKILL_LOADED, {
                 "title": call.arguments.get("title", ""),
@@ -310,7 +310,7 @@ flowchart TD
     end
 
     subgraph S3["③ 工具加载（模型主动）"]
-        LLM["模型读到索引块"] --> TOOL["use_skill(title)"]
+        LLM["模型读到索引块"] --> TOOL["load_skill(title)"]
         TOOL --> LOAD2["registry.load(title)"]
         LOAD2 --> EV2["emit SKILL_LOADED {auto 缺省}"]
     end
@@ -355,7 +355,7 @@ def match(self, user_input: str) -> str | None:
 
 - **大小写不敏感**、**子串匹配**（非分词、非正则）。
 - **只返回第一个命中**——按 `index` 的插入顺序（即 `_scan_dir` 的 `sorted(glob)` 顺序，先 user 后 project 覆盖）。
-- 想一次命中多个技能，得靠模型自己从索引块里再调 `use_skill`。这是刻意的：自动加载只做「明显的意图识别」，不做激进猜测。
+- 想一次命中多个技能，得靠模型自己从索引块里再调 `load_skill`。这是刻意的：自动加载只做「明显的意图识别」，不做激进猜测。
 - 中文没有词边界，所以 `read_when: [提交]` 能匹配「帮我提交代码」——子串匹配对中文反而比英文更自然。副作用是**短触发词容易误伤**（`read_when: [a]` 几乎必中），写 `read_when` 时要选有区分度的词。
 
 ### 6.3 懒加载的实现要点
@@ -569,7 +569,7 @@ def authorize_skill_tool(tool: str, path: str | None,
 | 事件 | 触发点 | 载荷 |
 |---|---|---|
 | `skill_loaded` | 自动匹配（`agent.py:131-132`） | `{"title": ..., "auto": true}` |
-| `skill_loaded` | `use_skill` 执行后（`agent.py:495-498`） | `{"title": ..., "loaded": [已加载 title 列表]}` |
+| `skill_loaded` | `load_skill` 执行后（`agent.py:495-498`） | `{"title": ..., "loaded": [已加载 title 列表]}` |
 
 事件会持久化进 transcript，所以历史回放时能看到「某个技能在某一轮被加载」。
 
@@ -580,11 +580,11 @@ def authorize_skill_tool(tool: str, path: str | None,
 **Q1：为什么用工具而不是直接把技能塞进 system prompt？**
 技能的正文可能很长（几百行 SOP），而大部分对话用不到。用工具调用做闸门，让模型**为它真正要用的知识付费**。这也是 Claude Skills 等同类设计的共同选择。
 
-**Q2：`read_when` 自动加载和 `use_skill` 手动加载会不会重复？**
-不会。`load()` 有 `if skill.loaded: return "...已在上下文中。"` 的幂等保护，自动加载过的技能再被 `use_skill` 调用不会重复计入。
+**Q2：`read_when` 自动加载和 `load_skill` 手动加载会不会重复？**
+不会。`load()` 有 `if skill.loaded: return "...已在上下文中。"` 的幂等保护，自动加载过的技能再被 `load_skill` 调用不会重复计入。
 
 **Q3：加载的技能正文会进 `messages` 吗？**
-两条路都有：`use_skill` 的返回是 `tool_result`，会进 `messages`（当轮模型立刻看到）；同时 `loaded_block()` 每轮拼进 system prompt（后续轮次生效）。**这是一份内容出现在两处**，有轻微 token 重复。好处是既保证当轮可见，又保证跨轮可见。
+两条路都有：`load_skill` 的返回是 `tool_result`，会进 `messages`（当轮模型立刻看到）；同时 `loaded_block()` 每轮拼进 system prompt（后续轮次生效）。**这是一份内容出现在两处**，有轻微 token 重复。好处是既保证当轮可见，又保证跨轮可见。
 
 **Q4：压缩（compact）会裁掉技能正文吗？**
 `messages` 里的那份 `tool_result` 可能被 L1 截断/L3 剪枝裁掉，但 **system prompt 里的那份不受影响**——压缩只动 `messages`。这是把技能内容放 system prompt 而非 messages 的一个隐性收益。
@@ -599,7 +599,7 @@ def authorize_skill_tool(tool: str, path: str | None,
 不会。`parse_skill_md` 捕获所有解析异常返回 `None`（`model.py:158-163`），该文件被静默跳过，其余技能正常工作。代价是**没有错误提示**，排查时只能手动验证文件格式。
 
 **Q8：技能正文里可以引用其他技能吗？**
-没有内置的引用机制。可以在正文里写「调用 `use_skill` 加载 xxx」，模型会照做，但这是纯提示词层面的约定，没有任何机制保证。
+没有内置的引用机制。可以在正文里写「调用 `load_skill` 加载 xxx」，模型会照做，但这是纯提示词层面的约定，没有任何机制保证。
 
 ---
 
@@ -649,7 +649,7 @@ def authorize_skill_tool(tool: str, path: str | None,
 
 ## 16. 关联文档
 
-- [09-tools.md](./09-tools.md) — M3 工具执行层（`use_skill` 的装配）
+- [09-tools.md](./09-tools.md) — M3 工具执行层（`load_skill` 的装配）
 - [06-agent.md](./06-agent.md) — M2 主循环（`_system_prompt` 注入与执行链）
 - [08-permissions.md](./08-permissions.md) — M4 权限治理层（D1 的上层天花板）
 - [10-context.md](./10-context.md) — token 预算（`parts["skills"]` 的用途）

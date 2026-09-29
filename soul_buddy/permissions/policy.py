@@ -38,7 +38,7 @@ ROLLBACK_TOOLS = {"list_changes", "rollback_file", "rollback_session"}
 # permission gate. Auto-allowed so the main agent can route without ASK.
 TASK_TOOLS = {"task"}
 # Skill tool — loads a skill's prompt body. Pure read, always auto-allowed.
-SKILL_TOOLS = {"use_skill"}
+SKILL_TOOLS = {"load_skill"}
 # Memory tools — write only to the local memory DB under ~/.soul_buddy (never
 # touch the workspace). Values are validated (stable-key format, bounded
 # importance/expiry) and every write is audited with session provenance.
@@ -263,7 +263,7 @@ class PermissionPolicy:
             return PermissionDecision(PermissionAction.ALLOW, "rollback_default",
                                      "rollback tool auto-allowed (restores file-history snapshot)",
                                      allow_remember=True)
-        # 4d. task / use_skill — delegation to sub-agent / loading a skill.
+        # 4d. task / load_skill — delegation to sub-agent / loading a skill.
         # No file side effects at the delegation boundary; sub-agent enforces
         # its own narrower permission gate internally.
         if req.tool in TASK_TOOLS or req.tool in SKILL_TOOLS:
